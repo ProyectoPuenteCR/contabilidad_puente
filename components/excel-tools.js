@@ -184,6 +184,157 @@ function extractInvestments(workbook, XLSX) {
     .filter(Boolean);
 }
 
+function endOfMonthIso(year, month) {
+  const date = new Date(Number(year), Number(month), 0);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function cleanConfigName(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function stableHourId({ year, month, row, specialist, service }) {
+  const slug = `${specialist}-${service}`
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 80);
+
+  return `excel-gh-${year}-${String(month).padStart(2, '0')}-r${row}-${slug}`;
+}
+
+function extractHistoricalHours(workbook) {
+  const sheetName = workbook.SheetNames.find(
+    (name) => normalizeHeader(name) === 'gastos y horas'
+  );
+
+  if (!sheetName) {
+    return {
+      hours: [],
+      specialists: [],
+      services: [],
+      year: null,
+      hourlyRate: 0,
+      sheetName: '',
+    };
+  }
+
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet) {
+    return {
+      hours: [],
+      specialists: [],
+      services: [],
+      year: null,
+      hourlyRate: 0,
+      sheetName,
+    };
+  }
+
+  const sourceYear = Number(sheetValue(sheet, 'L24', 0)) || 0;
+  const hourlyRate = Number(sheetValue(sheet, 'M8', 0)) || 0;
+
+  if (!sourceYear) {
+    return {
+      hours: [],
+      specialists: [],
+      services: [],
+      year: null,
+      hourlyRate,
+      sheetName,
+    };
+  }
+
+  const monthColumns = ['E','G','I','K','M','O','Q','S','U','W','Y','AA'];
+  const groupedBlocks = [
+    { rows: [29, 30, 31, 32], specialistRow: 33 },
+    { rows: [35, 36, 37], specialistRow: 38 },
+    { rows: [40, 41, 42, 43], specialistRow: 44 },
+    { rows: [47, 48, 49, 50], specialistRow: 51 },
+  ];
+  const directRows = [54, 55, 56, 57, 58, 59, 60];
+  const hours = [];
+
+  function addRow(rowNumber, specialistName) {
+    const specialist = cleanConfigName(specialistName);
+    const service = cleanConfigName(sheetValue(sheet, `D${rowNumber}`, ''));
+
+    if (!specialist || !service) return;
+
+    monthColumns.forEach((column, index) => {
+      const month = index + 1;
+      const value = Number(sheetValue(sheet, `${column}${rowNumber}`, 0)) || 0;
+
+      if (value <= 0) return;
+
+      hours.push({
+        id: stableHourId({
+          year: sourceYear,
+          month,
+          row: rowNumber,
+          specialist,
+          service,
+        }),
+        date: endOfMonthIso(sourceYear, month),
+        specialist,
+        service,
+        hours: value,
+        hourlyRate,
+        notes:
+          `Histórico mensual importado de la hoja "${sheetName}". ` +
+          `La fecha representa el cierre del mes; origen: fila ${rowNumber}.`,
+      });
+    });
+  }
+
+  for (const block of groupedBlocks) {
+    const specialist = sheetValue(sheet, `C${block.specialistRow}`, '');
+    for (const rowNumber of block.rows) {
+      addRow(rowNumber, specialist);
+    }
+  }
+
+  for (const rowNumber of directRows) {
+    addRow(rowNumber, sheetValue(sheet, `C${rowNumber}`, ''));
+  }
+
+  const configuredServices = [];
+  for (let row = 28; row <= 45; row += 1) {
+    const value = cleanConfigName(sheetValue(sheet, `AH${row}`, ''));
+    if (value) configuredServices.push(value);
+  }
+
+  const configuredSpecialists = [];
+  for (let row = 28; row <= 45; row += 1) {
+    const value = cleanConfigName(sheetValue(sheet, `AI${row}`, ''));
+    if (value) configuredSpecialists.push(value);
+  }
+
+  const specialists = [...new Set([
+    ...configuredSpecialists,
+    ...hours.map((row) => row.specialist),
+  ])].sort((a, b) => a.localeCompare(b, 'es'));
+
+  const services = [...new Set([
+    ...configuredServices,
+    ...hours.map((row) => row.service),
+  ])].sort((a, b) => a.localeCompare(b, 'es'));
+
+  return {
+    hours,
+    specialists,
+    services,
+    year: sourceYear,
+    hourlyRate,
+    sheetName,
+  };
+}
+
 function exportRows(movements) {
   let runningBalance = 0;
 
@@ -336,21 +487,34 @@ export default function ExcelTools({ movements, saldoSnapshot, onImport }) {
 
       const snapshot = extractSaldoSnapshot(workbook);
       const investments = extractInvestments(workbook, XLSX);
+      const hourHistory = extractHistoricalHours(workbook);
       const saldoText = snapshot
         ? `\nTambién se encontraron los datos auxiliares de la hoja Saldo${investments.length ? ` y ${investments.length} plazo(s) fijo(s)` : ''}.`
         : '\nNo se encontró una hoja Saldo reconocible.';
 
+      const historyText = hourHistory.hours.length
+        ? `\nTambién se encontraron ${hourHistory.hours.length.toLocaleString('es-AR')} registros históricos de horas del ejercicio ${hourHistory.year}, por ${hourHistory.hours.reduce((sum, row) => sum + Number(row.hours || 0), 0).toLocaleString('es-AR', { maximumFractionDigits: 2 })} horas.`
+        : '\nNo se encontraron registros históricos de horas reconocibles.';
+
       const confirmText =
         `Se encontraron ${validRows.length.toLocaleString('es-AR')} movimientos en la hoja "${sheetName}".` +
         saldoText +
-        '\n\nAceptar reemplazará los datos actualmente guardados en este navegador.';
+        historyText +
+        '\n\nAceptar reemplazará el Libro con el archivo importado y combinará los históricos de Horas sin duplicarlos.';
 
       if (!window.confirm(confirmText)) return;
 
-      onImport({ movements: validRows, saldoSnapshot: snapshot, investments });
+      onImport({
+        movements: validRows,
+        saldoSnapshot: snapshot,
+        investments,
+        hours: hourHistory.hours,
+        hourSpecialists: hourHistory.specialists,
+        hourServices: hourHistory.services,
+      });
 
       window.alert(
-        `Importación completada: ${validRows.length.toLocaleString('es-AR')} movimientos cargados.`
+        `Importación completada: ${validRows.length.toLocaleString('es-AR')} movimientos y ${hourHistory.hours.length.toLocaleString('es-AR')} registros históricos de horas procesados.`
       );
     } catch (error) {
       console.error(error);
