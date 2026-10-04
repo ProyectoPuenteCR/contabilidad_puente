@@ -197,6 +197,7 @@ export default function AccountingApp({ user = null }) {
   const [concepts, setConcepts] = useState([]);
   const [editingMovement, setEditingMovement] = useState(null);
   const [historicalEdit, setHistoricalEdit] = useState(null);
+  const [zeroAdjustment, setZeroAdjustment] = useState(null);
   const [auditLog, setAuditLog] = useState([]);
   const [ready, setReady] = useState(false);
   const [query, setQuery] = useState('');
@@ -684,6 +685,93 @@ export default function AccountingApp({ user = null }) {
     setHistoricalEdit(null);
   }
 
+  function openZeroAdjustment() {
+    const result = Number(filteredTotals.income || 0) - Number(filteredTotals.expense || 0);
+    if (Math.abs(result) < 0.005 || account === 'TODAS') return;
+
+    const filteredYears = [...new Set(filtered.map(movementYear).filter(Boolean))]
+      .sort((a, b) => Number(a) - Number(b));
+
+    const selectedYear =
+      year !== 'TODOS'
+        ? String(year)
+        : filteredYears.length === 1
+          ? String(filteredYears[0])
+          : String(filteredYears[filteredYears.length - 1] || new Date().getFullYear());
+
+    const currentYear = String(new Date().getFullYear());
+    const defaultDate = Number(selectedYear) < Number(currentYear)
+      ? `${selectedYear}-12-31`
+      : new Date().toISOString().slice(0, 10);
+
+    setZeroAdjustment({
+      account,
+      year: selectedYear,
+      date: defaultDate,
+      resultBefore: result,
+      adjustmentIncome: result < 0 ? Math.abs(result) : 0,
+      adjustmentExpense: result > 0 ? result : 0,
+      reason: '',
+    });
+  }
+
+  function saveZeroAdjustment(payload) {
+    if (!zeroAdjustment) return;
+
+    const reason = String(payload?.reason || '').trim();
+    const date = String(payload?.date || zeroAdjustment.date || '').trim();
+
+    if (reason.length < 5 || !date) return;
+
+    const adjustment = {
+      id: crypto.randomUUID(),
+      date,
+      account: zeroAdjustment.account,
+      folder: 'Ajustes',
+      concept: 'Redondeo Banco',
+      detail: `Ajuste de cierre para llevar ${zeroAdjustment.account} a resultado $ 0,00`,
+      operation: `AJ-${String(zeroAdjustment.year).replace(/\D/g, '')}-${Date.now().toString().slice(-6)}`,
+      income: Number(zeroAdjustment.adjustmentIncome || 0),
+      expense: Number(zeroAdjustment.adjustmentExpense || 0),
+      invoice: '',
+      notes: reason,
+    };
+
+    setMovements((prev) => [adjustment, ...prev]);
+
+    if (!concepts.includes('Redondeo Banco')) {
+      setConcepts((prev) => [...prev, 'Redondeo Banco']
+        .sort((a, b) => a.localeCompare(b, 'es')));
+    }
+
+    const logEntry = {
+      id: crypto.randomUUID(),
+      at: new Date().toISOString(),
+      userName: user?.name || 'Usuario',
+      userEmail: user?.email || '',
+      action: 'Ajuste contable a resultado cero',
+      oldConcept: '',
+      newConcept: 'Redondeo Banco',
+      reason,
+      account: zeroAdjustment.account,
+      year: zeroAdjustment.year,
+      affectedCount: 1,
+      affectedIds: [adjustment.id],
+      previousIncome: Number(filteredTotals.income || 0),
+      previousExpense: Number(filteredTotals.expense || 0),
+      previousResult: Number(zeroAdjustment.resultBefore || 0),
+      newIncome: Number(filteredTotals.income || 0) + Number(adjustment.income || 0),
+      newExpense: Number(filteredTotals.expense || 0) + Number(adjustment.expense || 0),
+      newResult: 0,
+      changedValueCount: 0,
+      valueChanges: [],
+      adjustmentMovement: adjustment,
+    };
+
+    setAuditLog((prev) => [logEntry, ...prev].slice(0, 1000));
+    setZeroAdjustment(null);
+  }
+
   function openStatistics(accountName = 'TODAS') {
     setAccount(accountName || 'TODAS');
     setConcept('TODOS');
@@ -1097,6 +1185,20 @@ export default function AccountingApp({ user = null }) {
               />
             </div>
 
+            {account !== 'TODAS' && Math.abs(filteredTotals.income - filteredTotals.expense) >= 0.005 && (
+              <div className="zero-adjustment-bar">
+                <div>
+                  <strong>Resultado pendiente: {money.format(filteredTotals.income - filteredTotals.expense)}</strong>
+                  <span>
+                    Podés generar un movimiento de ajuste para que el resultado real de {account} quede exactamente en $ 0,00.
+                  </span>
+                </div>
+                <button type="button" className="secondary zero-adjustment-button" onClick={openZeroAdjustment}>
+                  Ajustar a $ 0
+                </button>
+              </div>
+            )}
+
             <Card title="Evolución anual">
               <div className="table-wrap">
                 <table className="annual-balance-table">
@@ -1390,6 +1492,14 @@ export default function AccountingApp({ user = null }) {
           conceptOptions={availableConcepts}
           onClose={() => setHistoricalEdit(null)}
           onSave={saveHistoricalConceptEdit}
+        />
+      )}
+
+      {zeroAdjustment && (
+        <ZeroAdjustmentModal
+          adjustment={zeroAdjustment}
+          onClose={() => setZeroAdjustment(null)}
+          onSave={saveZeroAdjustment}
         />
       )}
     </div>
@@ -1982,6 +2092,102 @@ function AuditLogCard({ auditLog }) {
         </table>
       </div>
     </Card>
+  );
+}
+
+function ZeroAdjustmentModal({ adjustment, onClose, onSave }) {
+  const [reason, setReason] = useState('');
+  const [date, setDate] = useState(adjustment.date || '');
+
+  const isHistorical = Number(adjustment.year) < new Date().getFullYear();
+  const amount = Number(adjustment.adjustmentIncome || adjustment.adjustmentExpense || 0);
+  const direction = Number(adjustment.adjustmentIncome || 0) > 0 ? 'Entrada' : 'Salida';
+
+  function submit(event) {
+    event.preventDefault();
+    if (reason.trim().length < 5 || !date) return;
+    onSave({ reason, date });
+  }
+
+  return (
+    <div className="modal-backdrop" onMouseDown={onClose}>
+      <div className="modal zero-adjustment-modal" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="modal-head">
+          <div>
+            <span className={isHistorical ? 'historical-badge warning' : 'historical-badge'}>
+              {isHistorical ? 'Ajuste de ejercicio histórico' : 'Ajuste contable'}
+            </span>
+            <h2>Ajustar resultado a $ 0,00</h2>
+            <p>
+              Se agregará un movimiento compensatorio. No se modifican ni se ocultan los movimientos originales.
+            </p>
+          </div>
+          <button className="icon-btn" type="button" onClick={onClose}>×</button>
+        </div>
+
+        <form onSubmit={submit}>
+          <div className="zero-adjustment-summary">
+            <div>
+              <small>Cuenta</small>
+              <strong>{adjustment.account}</strong>
+            </div>
+            <div>
+              <small>Resultado actual</small>
+              <strong className={adjustment.resultBefore >= 0 ? 'income' : 'expense'}>
+                {money.format(adjustment.resultBefore)}
+              </strong>
+            </div>
+            <div>
+              <small>Ajuste a generar</small>
+              <strong>{direction} {money.format(amount)}</strong>
+            </div>
+            <div>
+              <small>Resultado posterior</small>
+              <strong className="income">{money.format(0)}</strong>
+            </div>
+          </div>
+
+          <div className="form-row">
+            <Field label="Fecha del ajuste">
+              <input
+                type="date"
+                required
+                value={date}
+                onChange={(event) => setDate(event.target.value)}
+              />
+            </Field>
+
+            <Field label="Concepto">
+              <input value="Redondeo Banco" disabled />
+            </Field>
+          </div>
+
+          <Field label={isHistorical ? 'Motivo del ajuste del ejercicio histórico *' : 'Motivo del ajuste *'}>
+            <textarea
+              required
+              minLength={5}
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              placeholder="Ej.: cierre de billetera / diferencia de redondeo conciliada contra extracto."
+            />
+          </Field>
+
+          <div className="historical-warning">
+            <strong>El ajuste queda auditado.</strong>
+            <span>
+              Se conservará el resultado anterior, el movimiento generado, el usuario, la fecha y el motivo.
+            </span>
+          </div>
+
+          <div className="modal-actions">
+            <button type="button" className="secondary" onClick={onClose}>Cancelar</button>
+            <button className="primary" disabled={reason.trim().length < 5 || !date}>
+              Crear ajuste y dejar en $ 0
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
 
