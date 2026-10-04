@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useEffect, useMemo, useState } from 'react';
 import { accounts, initialHours, initialMovements } from '../lib/seed';
 import ExcelTools from './excel-tools';
@@ -300,9 +301,21 @@ export default function AccountingApp() {
   return (
     <div className={dark ? 'app dark' : 'app'}>
       <aside className="sidebar">
-        <div className="brand">
-          <div className="brand-mark">P</div>
-          <div><strong>Proyecto Puente</strong><span>Contabilidad</span></div>
+        <div className="brand brand-official">
+          <div className="brand-logo-card">
+            <Image
+              src="/logo-proyecto-puente.webp"
+              alt="Proyecto Puente"
+              width={420}
+              height={273}
+              className="brand-logo-image"
+              priority
+            />
+          </div>
+          <div className="brand-product">
+            <strong>Contabilidad</strong>
+            <span>Proyecto Puente</span>
+          </div>
         </div>
 
         <nav>
