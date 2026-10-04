@@ -729,59 +729,39 @@ export default function AccountingApp() {
               title="Libro de contabilidad"
               subtitle="Resumen y administración de todos los movimientos del proyecto."
               action="Nuevo movimiento"
-              onAction={() => setModal('movement')}
+              onAction={openNewMovement}
             />
 
-            <div className="grid-4 book-main-metrics">
-              <Metric
-                label={year === 'TODOS' ? 'Ingresos · todos los años' : `Ingresos · ${year}`}
-                value={money.format(filteredTotals.income)}
-                tone="green"
-              />
-              <Metric
-                label={year === 'TODOS' ? 'Gastos · todos los años' : `Gastos · ${year}`}
-                value={money.format(filteredTotals.expense)}
-                tone="red"
-              />
+            <div className="grid-2 book-main-metrics">
               <Metric
                 label="Saldo actual bruto total"
                 value={currentBalanceLabel}
                 tone="blue"
-                hint="C4 = suma de saldos bancarios del Libro"
+                hint="Calculado desde el Libro de contabilidad"
+                onClick={() => setSection('balance')}
               />
               <Metric
                 label="Dinero disponible"
                 value={money.format(saldoCalculated.available || 0)}
                 tone="green"
-                hint="C6 = Cash + Mercado Libre + Efectivo + Mercado Libre 2"
+                hint="Resumen de disponibilidad actual"
+                onClick={() => setSection('balance')}
               />
             </div>
 
-            <section className="book-balance-labels" aria-label="Resumen financiero actual">
-              <div className="finance-label finance-label-wide">
-                <span>Saldo bruto + eCheq a cobrar</span>
-                <strong>{money.format(saldoCalculated.grossPlusReceivables)}</strong>
-              </div>
-
-              <div className="finance-label">
-                <span>Futuros cobros</span>
-                <strong>{money.format(saldoCalculated.futureReceivables)}</strong>
-              </div>
-
-              <div className="finance-label">
-                <span>Certificación a registrar (45 D)</span>
-                <strong>{money.format(saldoCalculated.certification45)}</strong>
-              </div>
-
+            <section className="book-balance-labels" aria-label="Saldos por cuenta">
               <div className="bank-labels">
                 {saldoCalculated.banks.map((bank) => (
-                  <div
-                    className={`bank-label bank-${String(bank.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+                  <button
+                    type="button"
+                    className={`bank-label bank-label-button bank-${String(bank.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
                     key={bank.name}
+                    onClick={() => openStatistics(bank.name)}
+                    title={`Ver resumen de ${bank.name}`}
                   >
                     <span>{bank.name}</span>
                     <strong>{bank.value == null ? '' : money.format(bank.value)}</strong>
-                  </div>
+                  </button>
                 ))}
               </div>
             </section>
@@ -816,6 +796,7 @@ export default function AccountingApp() {
                 columnWidths={columnWidths}
                 setColumnWidths={setColumnWidths}
                 onDelete={removeMovement}
+                onEdit={openEditMovement}
                 showFilteredTotals={concept !== 'TODOS'}
                 filteredLabel={concept}
                 totals={filteredTotals}
