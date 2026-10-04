@@ -208,7 +208,7 @@ function stableHourId({ year, month, row, specialist, service }) {
   return `excel-gh-${year}-${String(month).padStart(2, '0')}-r${row}-${slug}`;
 }
 
-function extractHistoricalHours(workbook) {
+export function extractHistoricalHours(workbook) {
   const sheetName = workbook.SheetNames.find(
     (name) => normalizeHeader(name) === 'gastos y horas'
   );
