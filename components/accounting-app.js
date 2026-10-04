@@ -2161,292 +2161,378 @@ function ExpenseTable({
   );
 }
 
-function IncomeExpenseChart({ data, periodLabel }) {
-  const [chartType, setChartType] = useState('bars');
+function ConceptTimelineChart({ data, allYears }) {
+  const [chartType, setChartType] = useState('lines');
+  const [hiddenSeries, setHiddenSeries] = useState(() => new Set(['__income', '__expense']));
 
-  const totalIncome = data.reduce((sum, item) => sum + Number(item.income || 0), 0);
-  const totalExpense = data.reduce((sum, item) => sum + Number(item.expense || 0), 0);
-  const result = totalIncome - totalExpense;
+  const periods = data?.periods || [];
+  const concepts = data?.concepts || [];
 
-  const max = Math.max(
-    1,
-    ...data.flatMap((item) => [
-      Number(item.income || 0),
-      Number(item.expense || 0),
-    ])
-  );
+  const colorForIndex = (index) => {
+    const hue = (index * 47 + 18) % 360;
+    return `hsl(${hue} 72% 56%)`;
+  };
 
-  const lineModel = useMemo(() => {
-    const width = 1000;
-    const height = 300;
-    const padding = { left: 58, right: 28, top: 26, bottom: 42 };
-    const usableWidth = width - padding.left - padding.right;
-    const usableHeight = height - padding.top - padding.bottom;
-    const count = Math.max(data.length, 1);
+  const series = useMemo(() => {
+    const conceptSeries = concepts.map((item, index) => ({
+      key: `concept:${item.name}`,
+      label: item.name,
+      color: colorForIndex(index),
+      type: 'concept',
+      values: periods.map((period) => Number(period.concepts?.[item.name] || 0)),
+      total: Number(item.net || 0),
+      magnitude: Number(item.magnitude || 0),
+    }));
 
-    const results = data.map((item) =>
-      Number(item.income || 0) - Number(item.expense || 0)
-    );
+    const resultValues = periods.map((period) => Number(period.result || 0));
 
-    let slope = 0;
-    let intercept = results[0] || 0;
+    // Tendencia logarítmica real: y = a * ln(x) + b.
+    // x es 1..N (siempre positivo), por lo que admite resultados y negativos.
+    let logA = 0;
+    let logB = resultValues[0] || 0;
 
-    if (data.length > 1) {
-      const n = data.length;
-      const sumX = data.reduce((sum, _, index) => sum + index, 0);
-      const sumY = results.reduce((sum, value) => sum + value, 0);
-      const sumXY = results.reduce((sum, value, index) => sum + index * value, 0);
-      const sumXX = data.reduce((sum, _, index) => sum + index * index, 0);
-      const denominator = n * sumXX - sumX * sumX;
+    if (resultValues.length > 1) {
+      const n = resultValues.length;
+      let sumLogX = 0;
+      let sumY = 0;
+      let sumLogXY = 0;
+      let sumLogX2 = 0;
 
-      if (denominator !== 0) {
-        slope = (n * sumXY - sumX * sumY) / denominator;
-        intercept = (sumY - slope * sumX) / n;
+      resultValues.forEach((value, index) => {
+        const logX = Math.log(index + 1);
+        sumLogX += logX;
+        sumY += value;
+        sumLogXY += logX * value;
+        sumLogX2 += logX * logX;
+      });
+
+      const denominator = n * sumLogX2 - sumLogX * sumLogX;
+      if (Math.abs(denominator) > 1e-12) {
+        logA = (n * sumLogXY - sumLogX * sumY) / denominator;
+        logB = (sumY - logA * sumLogX) / n;
       }
     }
 
-    const trendValues = data.map((_, index) => intercept + slope * index);
+    const trendValues = periods.map((_, index) => logA * Math.log(index + 1) + logB);
 
-    const allValues = [
-      0,
-      ...data.map((item) => Number(item.income || 0)),
-      ...data.map((item) => Number(item.expense || 0)),
-      ...trendValues,
+    return [
+      ...conceptSeries,
+      {
+        key: '__result',
+        label: 'Resultado total',
+        color: '#f0c34e',
+        type: 'result',
+        values: resultValues,
+        total: resultValues.reduce((sum, value) => sum + value, 0),
+      },
+      {
+        key: '__trend',
+        label: 'Tendencia resultado (log.)',
+        color: '#f7d36b',
+        type: 'trend',
+        values: trendValues,
+        total: trendValues[trendValues.length - 1] || 0,
+        logA,
+      },
+      {
+        key: '__income',
+        label: 'Ingresos totales',
+        color: '#10b981',
+        type: 'income',
+        values: periods.map((period) => Number(period.income || 0)),
+        total: periods.reduce((sum, period) => sum + Number(period.income || 0), 0),
+      },
+      {
+        key: '__expense',
+        label: 'Egresos totales',
+        color: '#ff4f5f',
+        type: 'expense',
+        values: periods.map((period) => -Number(period.expense || 0)),
+        total: periods.reduce((sum, period) => sum + Number(period.expense || 0), 0),
+      },
     ];
+  }, [concepts, periods]);
 
-    const minValue = Math.min(...allValues);
-    const maxValue = Math.max(...allValues, 1);
-    const valueRange = Math.max(1, maxValue - minValue);
+  const visibleSeries = series.filter((item) => !hiddenSeries.has(item.key));
+  const visibleLineSeries = visibleSeries.filter((item) => item.type !== 'trend' || chartType === 'lines');
 
-    const x = (index) =>
-      data.length <= 1
-        ? padding.left + usableWidth / 2
-        : padding.left + (index / (count - 1)) * usableWidth;
+  const width = Math.max(1080, periods.length * (allYears ? 62 : 78));
+  const height = 390;
+  const padding = { left: 74, right: 34, top: 28, bottom: 72 };
+  const plotWidth = width - padding.left - padding.right;
+  const plotHeight = height - padding.top - padding.bottom;
 
-    const y = (value) =>
-      padding.top + ((maxValue - value) / valueRange) * usableHeight;
+  const scaleValues = visibleLineSeries.flatMap((item) => item.values);
+  const minValue = Math.min(0, ...scaleValues, -1);
+  const maxValue = Math.max(0, ...scaleValues, 1);
+  const range = Math.max(1, maxValue - minValue);
 
-    const incomePoints = data
-      .map((item, index) => `${x(index)},${y(Number(item.income || 0))}`)
-      .join(' ');
+  const x = (index) => (
+    periods.length <= 1
+      ? padding.left + plotWidth / 2
+      : padding.left + (index / (periods.length - 1)) * plotWidth
+  );
 
-    const expensePoints = data
-      .map((item, index) => `${x(index)},${y(Number(item.expense || 0))}`)
-      .join(' ');
+  const y = (value) => padding.top + ((maxValue - value) / range) * plotHeight;
+  const zeroY = y(0);
 
-    const trendPoints = trendValues
-      .map((value, index) => `${x(index)},${y(value)}`)
-      .join(' ');
+  function toggleSeries(key) {
+    setHiddenSeries((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
-    return {
-      width,
-      height,
-      padding,
-      x,
-      y,
-      incomePoints,
-      expensePoints,
-      trendPoints,
-      trendValues,
-      zeroY: y(0),
-      slope,
-    };
-  }, [data]);
+  function showAll() {
+    setHiddenSeries(new Set());
+  }
 
-  const flowTotal = totalIncome + totalExpense;
-  const incomeShare = flowTotal ? (totalIncome / flowTotal) * 100 : 0;
-  const expenseShare = flowTotal ? (totalExpense / flowTotal) * 100 : 0;
+  function showConceptsOnly() {
+    setHiddenSeries(new Set(['__income', '__expense', '__result', '__trend']));
+  }
+
+  const pieSeries = concepts
+    .map((item, index) => ({
+      key: `concept:${item.name}`,
+      label: item.name,
+      color: colorForIndex(index),
+      value: Number(item.magnitude || 0),
+    }))
+    .filter((item) => item.value > 0 && !hiddenSeries.has(item.key));
+
+  const pieTotal = pieSeries.reduce((sum, item) => sum + item.value, 0);
+  let pieCursor = 0;
+  const pieStops = pieSeries.map((item) => {
+    const start = pieCursor;
+    const end = pieTotal ? start + (item.value / pieTotal) * 100 : start;
+    pieCursor = end;
+    return `${item.color} ${start}% ${end}%`;
+  });
+
+  const totalIncome = periods.reduce((sum, item) => sum + Number(item.income || 0), 0);
+  const totalExpense = periods.reduce((sum, item) => sum + Number(item.expense || 0), 0);
+  const totalResult = totalIncome - totalExpense;
+
+  const trendSeries = series.find((item) => item.key === '__trend');
 
   return (
-    <div className="income-expense-chart">
-      <div className="income-expense-chart-head">
-        <div className="income-expense-legend">
-          <span><i className="income-dot" />Ingresos</span>
-          <span><i className="expense-dot" />Egresos</span>
-          {chartType === 'lines' && (
-            <span><i className="trend-dot" />Tendencia resultado</span>
-          )}
+    <div className="concept-timeline-chart">
+      <div className="concept-timeline-toolbar">
+        <div>
+          <strong>Eje mensual</strong>
+          <span>
+            {allYears
+              ? 'Cada punto corresponde a un mes y año; ya no se agrupan los años en un único punto.'
+              : 'Cada punto corresponde a un mes del ejercicio seleccionado.'}
+          </span>
         </div>
 
-        <div className="income-expense-chart-actions">
+        <div className="concept-chart-actions">
           <label>
             Tipo de gráfico
             <select value={chartType} onChange={(event) => setChartType(event.target.value)}>
-              <option value="bars">Barras</option>
               <option value="lines">Líneas</option>
+              <option value="bars">Barras</option>
               <option value="pie">Torta</option>
               <option value="donut">Dona</option>
             </select>
           </label>
-
-          <div className="income-expense-chart-summary">
-            <span>
-              Resultado del filtro
-              <strong className={result >= 0 ? 'income' : 'expense'}>
-                {money.format(result)}
-              </strong>
-            </span>
-          </div>
+          <button type="button" className="secondary small" onClick={showAll}>Mostrar todas</button>
+          <button type="button" className="secondary small" onClick={showConceptsOnly}>Solo conceptos</button>
         </div>
       </div>
 
-      {chartType === 'bars' && (
-        <div className="income-expense-plot" role="img" aria-label="Gráfico de barras comparativo de ingresos y egresos">
-          {data.map((item) => {
-            const incomeHeight = Math.max(0, (Number(item.income || 0) / max) * 100);
-            const expenseHeight = Math.max(0, (Number(item.expense || 0) / max) * 100);
+      <div className="concept-series-legend">
+        {series.map((item) => {
+          const hidden = hiddenSeries.has(item.key);
+          return (
+            <button
+              type="button"
+              key={item.key}
+              className={hidden ? 'concept-legend-item off' : 'concept-legend-item'}
+              onClick={() => toggleSeries(item.key)}
+              title={hidden ? `Mostrar ${item.label}` : `Ocultar ${item.label}`}
+            >
+              <i
+                style={{
+                  background: item.type === 'trend' ? 'transparent' : item.color,
+                  borderTop: item.type === 'trend' ? `2px dashed ${item.color}` : 'none',
+                }}
+              />
+              <span>{item.label}</span>
+            </button>
+          );
+        })}
+      </div>
 
-            return (
-              <div className="income-expense-period" key={item.key}>
-                <div className="income-expense-bars">
-                  <div
-                    className="income-expense-bar income-bar"
-                    style={{ height: `${incomeHeight}%` }}
-                    title={`${periodLabel} ${item.label} · Ingresos: ${money.format(item.income || 0)}`}
-                  >
-                    <span>{money.format(item.income || 0)}</span>
-                  </div>
-                  <div
-                    className="income-expense-bar expense-bar"
-                    style={{ height: `${expenseHeight}%` }}
-                    title={`${periodLabel} ${item.label} · Egresos: ${money.format(item.expense || 0)}`}
-                  >
-                    <span>{money.format(item.expense || 0)}</span>
-                  </div>
-                </div>
-                <strong className="income-expense-label">{item.label}</strong>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {chartType === 'lines' && (
-        <div className="income-expense-line-wrap">
+      {(chartType === 'lines' || chartType === 'bars') && (
+        <div className="concept-chart-scroll">
           <svg
-            className="income-expense-line-chart"
-            viewBox={`0 0 ${lineModel.width} ${lineModel.height}`}
+            className="concept-timeline-svg"
+            viewBox={`0 0 ${width} ${height}`}
+            style={{ minWidth: `${width}px` }}
             role="img"
-            aria-label="Gráfico de líneas de ingresos, egresos y tendencia del resultado"
+            aria-label="Evolución mensual de todos los conceptos"
           >
             {[0, 1, 2, 3, 4].map((step) => {
-              const y = lineModel.padding.top +
-                ((lineModel.height - lineModel.padding.top - lineModel.padding.bottom) / 4) * step;
+              const gy = padding.top + (plotHeight / 4) * step;
               return (
                 <line
                   key={step}
-                  x1={lineModel.padding.left}
-                  x2={lineModel.width - lineModel.padding.right}
-                  y1={y}
-                  y2={y}
-                  className="line-grid"
+                  x1={padding.left}
+                  x2={width - padding.right}
+                  y1={gy}
+                  y2={gy}
+                  className="concept-grid-line"
                 />
               );
             })}
 
             <line
-              x1={lineModel.padding.left}
-              x2={lineModel.width - lineModel.padding.right}
-              y1={lineModel.zeroY}
-              y2={lineModel.zeroY}
-              className="line-zero"
+              x1={padding.left}
+              x2={width - padding.right}
+              y1={zeroY}
+              y2={zeroY}
+              className="concept-zero-line"
             />
 
-            <polyline
-              points={lineModel.incomePoints}
-              className="series-line income-series"
-            />
-            <polyline
-              points={lineModel.expensePoints}
-              className="series-line expense-series"
-            />
-            <polyline
-              points={lineModel.trendPoints}
-              className="series-line trend-series"
-            />
+            {chartType === 'lines' && visibleLineSeries.map((item) => {
+              const points = item.values
+                .map((value, index) => `${x(index)},${y(value)}`)
+                .join(' ');
 
-            {data.map((item, index) => (
-              <g key={item.key}>
-                <circle
-                  cx={lineModel.x(index)}
-                  cy={lineModel.y(Number(item.income || 0))}
-                  r="5"
-                  className="line-point income-point"
-                >
-                  <title>{`${item.label} · Ingresos: ${money.format(item.income || 0)}`}</title>
-                </circle>
-                <circle
-                  cx={lineModel.x(index)}
-                  cy={lineModel.y(Number(item.expense || 0))}
-                  r="5"
-                  className="line-point expense-point"
-                >
-                  <title>{`${item.label} · Egresos: ${money.format(item.expense || 0)}`}</title>
-                </circle>
-                <text
-                  x={lineModel.x(index)}
-                  y={lineModel.height - 14}
-                  className="line-axis-label"
-                  textAnchor="middle"
-                >
-                  {item.label}
-                </text>
-              </g>
+              return (
+                <g key={item.key}>
+                  <polyline
+                    points={points}
+                    fill="none"
+                    stroke={item.color}
+                    strokeWidth={item.type === 'trend' ? 3 : item.type === 'result' ? 3.5 : 2.2}
+                    strokeDasharray={item.type === 'trend' ? '10 8' : undefined}
+                    opacity={item.type === 'concept' ? 0.88 : 1}
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                  />
+
+                  {item.type !== 'trend' && item.values.map((value, index) => (
+                    <circle
+                      key={`${item.key}-${periods[index]?.key}`}
+                      cx={x(index)}
+                      cy={y(value)}
+                      r={item.type === 'concept' ? 2.5 : 4}
+                      fill={item.color}
+                      className="concept-line-point"
+                    >
+                      <title>
+                        {periods[index]?.fullLabel} · {item.label}: {money.format(value)}
+                      </title>
+                    </circle>
+                  ))}
+                </g>
+              );
+            })}
+
+            {chartType === 'bars' && periods.map((period, periodIndex) => {
+              const barSeries = visibleSeries.filter((item) => item.type !== 'trend');
+              const availableWidth = periods.length > 1 ? plotWidth / periods.length : 70;
+              const groupWidth = Math.min(availableWidth * 0.78, 52);
+              const barWidth = Math.max(1.5, groupWidth / Math.max(barSeries.length, 1));
+              const startX = x(periodIndex) - (barWidth * barSeries.length) / 2;
+
+              return barSeries.map((item, seriesIndex) => {
+                const value = Number(item.values[periodIndex] || 0);
+                const valueY = y(value);
+                const rectY = value >= 0 ? valueY : zeroY;
+                const rectHeight = Math.max(1, Math.abs(zeroY - valueY));
+
+                return (
+                  <rect
+                    key={`${period.key}-${item.key}`}
+                    x={startX + seriesIndex * barWidth}
+                    y={rectY}
+                    width={Math.max(1, barWidth - 0.6)}
+                    height={rectHeight}
+                    fill={item.color}
+                    opacity={item.type === 'concept' ? 0.82 : 1}
+                  >
+                    <title>
+                      {period.fullLabel} · {item.label}: {money.format(value)}
+                    </title>
+                  </rect>
+                );
+              });
+            })}
+
+            {periods.map((period, index) => (
+              <text
+                key={period.key}
+                x={x(index)}
+                y={height - 26}
+                className="concept-axis-label"
+                textAnchor="end"
+                transform={`rotate(-45 ${x(index)} ${height - 26})`}
+              >
+                {period.label}
+              </text>
             ))}
           </svg>
-
-          <div className="trend-explanation">
-            <strong>Tendencia del resultado neto</strong>
-            <span>
-              La línea punteada usa una regresión lineal sobre Ingresos − Egresos.
-              {lineModel.slope > 0
-                ? ' La tendencia general es ascendente.'
-                : lineModel.slope < 0
-                  ? ' La tendencia general es descendente.'
-                  : ' La tendencia general se mantiene estable.'}
-            </span>
-          </div>
         </div>
       )}
 
       {(chartType === 'pie' || chartType === 'donut') && (
-        <div className="income-expense-pie-layout">
+        <div className="concept-pie-layout">
           <div
-            className={chartType === 'donut' ? 'income-expense-pie donut' : 'income-expense-pie'}
+            className={chartType === 'donut' ? 'concept-pie donut' : 'concept-pie'}
             style={{
-              background: `conic-gradient(#10b981 0 ${incomeShare}%, #ff4f5f ${incomeShare}% 100%)`,
+              background: pieStops.length
+                ? `conic-gradient(${pieStops.join(',')})`
+                : 'var(--border)',
             }}
-            role="img"
-            aria-label={`Ingresos ${incomeShare.toFixed(1)}%, egresos ${expenseShare.toFixed(1)}%`}
           >
             {chartType === 'donut' && (
-              <div className="donut-center">
-                <small>Resultado</small>
-                <strong className={result >= 0 ? 'income' : 'expense'}>
-                  {money.format(result)}
-                </strong>
+              <div className="concept-donut-center">
+                <small>Movimiento</small>
+                <strong>{money.format(pieTotal)}</strong>
               </div>
             )}
           </div>
 
-          <div className="income-expense-pie-summary">
-            <h4>
-              Participación sobre el movimiento total
-            </h4>
+          <div className="concept-pie-list">
+            <h4>Participación por concepto</h4>
             <p>
-              Para torta/dona se compara Ingresos + Egresos como flujo total del período.
+              La torta/dona usa el movimiento absoluto de cada concepto para que ingresos y egresos
+              no se cancelen entre sí.
             </p>
-            <div>
-              <span><i className="income-dot" />Ingresos</span>
-              <strong>{incomeShare.toFixed(1)}%</strong>
-              <small>{money.format(totalIncome)}</small>
-            </div>
-            <div>
-              <span><i className="expense-dot" />Egresos</span>
-              <strong>{expenseShare.toFixed(1)}%</strong>
-              <small>{money.format(totalExpense)}</small>
-            </div>
+            {pieSeries.map((item) => (
+              <button
+                type="button"
+                key={item.key}
+                onClick={() => toggleSeries(item.key)}
+              >
+                <i style={{ background: item.color }} />
+                <span>{item.label}</span>
+                <strong>{pieTotal ? ((item.value / pieTotal) * 100).toFixed(1) : '0,0'}%</strong>
+                <small>{money.format(item.value)}</small>
+              </button>
+            ))}
           </div>
+        </div>
+      )}
+
+      {chartType === 'lines' && trendSeries && !hiddenSeries.has('__trend') && (
+        <div className="trend-explanation">
+          <strong>Tendencia logarítmica del resultado</strong>
+          <span>
+            Se calcula sobre el resultado mensual con la ecuación y = a·ln(x) + b,
+            usando cada mes como un punto independiente.
+            {trendSeries.logA > 0
+              ? ' La tendencia logarítmica es ascendente.'
+              : trendSeries.logA < 0
+                ? ' La tendencia logarítmica es descendente.'
+                : ' La tendencia se mantiene prácticamente estable.'}
+          </span>
         </div>
       )}
 
@@ -2460,8 +2546,8 @@ function IncomeExpenseChart({ data, periodLabel }) {
           <strong className="expense">{money.format(totalExpense)}</strong>
         </div>
         <div>
-          <span>Diferencia</span>
-          <strong className={result >= 0 ? 'income' : 'expense'}>{money.format(result)}</strong>
+          <span>Resultado</span>
+          <strong className={totalResult >= 0 ? 'income' : 'expense'}>{money.format(totalResult)}</strong>
         </div>
       </div>
     </div>
