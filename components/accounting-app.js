@@ -209,6 +209,54 @@ export default function AccountingApp() {
 
   const filteredTotals = useMemo(() => summarize(filtered), [filtered]);
 
+  const ledgerTotals = useMemo(() => {
+    const totals = summarize(movements);
+    const result = totals.income - totals.expense;
+    const expenseRatio = totals.income ? totals.expense / totals.income : 0;
+    const savingMargin = totals.income ? result / totals.income : 0;
+
+    return {
+      ...totals,
+      result,
+      expenseRatio,
+      savingMargin,
+    };
+  }, [movements]);
+
+  const ledgerAnnualStats = useMemo(() => {
+    const map = {};
+
+    for (const row of movements) {
+      const y = movementYear(row);
+      if (!y) continue;
+
+      if (!map[y]) {
+        map[y] = {
+          year: y,
+          income: 0,
+          expense: 0,
+          count: 0,
+        };
+      }
+
+      map[y].income += Number(row.income || 0);
+      map[y].expense += Number(row.expense || 0);
+      map[y].count += 1;
+    }
+
+    return Object.values(map)
+      .map((item) => {
+        const result = item.income - item.expense;
+        return {
+          ...item,
+          result,
+          expenseRatio: item.income ? item.expense / item.income : 0,
+          savingMargin: item.income ? result / item.income : 0,
+        };
+      })
+      .sort((a, b) => Number(b.year) - Number(a.year));
+  }, [movements]);
+
   const expenses = useMemo(
     () => filtered.filter((x) => Number(x.expense || 0) > 0),
     [filtered]
@@ -439,6 +487,9 @@ export default function AccountingApp() {
                 columnWidths={columnWidths}
                 setColumnWidths={setColumnWidths}
                 onDelete={removeMovement}
+                showFilteredTotals={concept !== 'TODOS'}
+                filteredLabel={concept}
+                totals={filteredTotals}
               />
             </Card>
           </>
@@ -448,8 +499,111 @@ export default function AccountingApp() {
           <>
             <Header
               title="Saldo"
-              subtitle="Indicadores importados de la hoja Saldo del libro original."
+              subtitle="Estadísticas históricas del Libro de contabilidad y posición financiera actual."
             />
+
+            <section className="balance-history-section">
+              <div className="section-head-inline balance-section-heading">
+                <div>
+                  <h3>Estadísticas totales · Libro de contabilidad</h3>
+                  <p>
+                    Calculadas únicamente desde Entradas y Salidas del libro.
+                    El resultado histórico no reemplaza al saldo bancario actual.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid-3 balance-total-grid">
+                <Metric
+                  label="Ingresos históricos"
+                  value={money.format(ledgerTotals.income)}
+                  tone="green"
+                />
+                <Metric
+                  label="Gastos históricos"
+                  value={money.format(ledgerTotals.expense)}
+                  tone="red"
+                />
+                <Metric
+                  label="Resultado histórico"
+                  value={money.format(ledgerTotals.result)}
+                  tone={ledgerTotals.result >= 0 ? 'green' : 'red'}
+                  hint="Entradas - Salidas"
+                />
+                <Metric
+                  label="Movimientos históricos"
+                  value={number.format(ledgerTotals.count)}
+                  tone="blue"
+                />
+                <Metric
+                  label="Gasto sobre ingresos"
+                  value={percent.format(ledgerTotals.expenseRatio || 0)}
+                  tone="amber"
+                />
+                <Metric
+                  label="Margen histórico"
+                  value={percent.format(ledgerTotals.savingMargin || 0)}
+                  tone={ledgerTotals.savingMargin >= 0 ? 'green' : 'red'}
+                />
+              </div>
+
+              <Card title="Estadísticas anuales del Libro de contabilidad">
+                <div className="table-wrap">
+                  <table className="annual-balance-table">
+                    <thead>
+                      <tr>
+                        <th>Año</th>
+                        <th>Ingresos</th>
+                        <th>Gastos</th>
+                        <th>Resultado</th>
+                        <th>Gasto / ingresos</th>
+                        <th>Margen</th>
+                        <th>Movimientos</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ledgerAnnualStats.map((item) => (
+                        <tr key={item.year}>
+                          <td><strong>{item.year}</strong></td>
+                          <td className="income money-cell">{money.format(item.income)}</td>
+                          <td className="expense money-cell">{money.format(item.expense)}</td>
+                          <td className={`money-cell ${item.result >= 0 ? 'income' : 'expense'}`}>
+                            {money.format(item.result)}
+                          </td>
+                          <td className="money-cell">{percent.format(item.expenseRatio || 0)}</td>
+                          <td className={`money-cell ${item.savingMargin >= 0 ? 'income' : 'expense'}`}>
+                            {percent.format(item.savingMargin || 0)}
+                          </td>
+                          <td className="money-cell">{number.format(item.count)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr>
+                        <td><strong>TOTAL</strong></td>
+                        <td className="income money-cell">{money.format(ledgerTotals.income)}</td>
+                        <td className="expense money-cell">{money.format(ledgerTotals.expense)}</td>
+                        <td className={`money-cell ${ledgerTotals.result >= 0 ? 'income' : 'expense'}`}>
+                          {money.format(ledgerTotals.result)}
+                        </td>
+                        <td className="money-cell">{percent.format(ledgerTotals.expenseRatio || 0)}</td>
+                        <td className={`money-cell ${ledgerTotals.savingMargin >= 0 ? 'income' : 'expense'}`}>
+                          {percent.format(ledgerTotals.savingMargin || 0)}
+                        </td>
+                        <td className="money-cell">{number.format(ledgerTotals.count)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </Card>
+            </section>
+
+            <div className="section-head-inline balance-current-heading">
+              <div>
+                <h3>Posición financiera actual</h3>
+                <p>Valores importados de la hoja Saldo del Excel original.</p>
+              </div>
+            </div>
 
             {!saldoSnapshot ? (
               <div className="data-warning">
@@ -806,7 +960,16 @@ function Filters({
   );
 }
 
-function LedgerTable({ rows, compact, columnWidths, setColumnWidths, onDelete }) {
+function LedgerTable({
+  rows,
+  compact,
+  columnWidths,
+  setColumnWidths,
+  onDelete,
+  showFilteredTotals = false,
+  filteredLabel = '',
+  totals = { income: 0, expense: 0 },
+}) {
   const columns = [
     { key: 'date', label: 'Fecha', min: 85 },
     { key: 'account', label: 'Cuenta', min: 110 },
@@ -893,6 +1056,22 @@ function LedgerTable({ rows, compact, columnWidths, setColumnWidths, onDelete })
             </tr>
           ))}
         </tbody>
+
+        {showFilteredTotals && (
+          <tfoot className="ledger-filter-total">
+            <tr>
+              <td colSpan={6}>
+                <strong>Total del concepto</strong>
+                <span title={filteredLabel}>{filteredLabel}</span>
+              </td>
+              <td className="income money-cell">{money.format(totals.income || 0)}</td>
+              <td className="expense money-cell">{money.format(totals.expense || 0)}</td>
+              <td colSpan={2}>
+                <span className="ledger-filter-count">{number.format(rows.length)} registros</span>
+              </td>
+            </tr>
+          </tfoot>
+        )}
       </table>
     </div>
   );
