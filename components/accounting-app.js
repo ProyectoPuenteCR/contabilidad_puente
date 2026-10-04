@@ -8,6 +8,7 @@ import InvestmentsPanel from './investments-panel';
 import AuthToolbar from './auth-toolbar';
 import BackupTools from './backup-tools';
 import AiAnalysisPanel from './ai-analysis-panel';
+import CloudDatabasePanel from './cloud-database-panel';
 
 const money = new Intl.NumberFormat('es-AR', {
   style: 'currency',
@@ -214,6 +215,26 @@ export default function AccountingApp({ user = null }) {
   const expenseTableRef = useRef(null);
   const [columnWidths, setColumnWidths] = useState(DEFAULT_WIDTHS);
 
+  const [cloudMode, setCloudMode] = useState(false);
+  const [cloudRevision, setCloudRevision] = useState(0);
+  const [cloudStatus, setCloudStatus] = useState({
+    configured: null,
+    connected: false,
+    active: false,
+    revision: 0,
+    ledger: { count: 0, income: 0, expense: 0, result: 0 },
+  });
+  const [cloudSyncState, setCloudSyncState] = useState('local');
+  const [cloudConflict, setCloudConflict] = useState('');
+  const [cloudMigrationReport, setCloudMigrationReport] = useState(null);
+  const [cloudMigrating, setCloudMigrating] = useState(false);
+
+  const cloudRevisionRef = useRef(0);
+  const cloudPendingRef = useRef(null);
+  const cloudSyncingRef = useRef(false);
+  const cloudSkipNextSyncRef = useRef(false);
+  const cloudSyncTimerRef = useRef(null);
+
   useEffect(() => {
     const storedMovements = loadStored('puente.movements', initialMovements);
     const storedHours = loadStored('puente.hours', initialHours);
@@ -254,6 +275,82 @@ export default function AccountingApp({ user = null }) {
     });
     setReady(true);
   }, []);
+
+  useEffect(() => {
+    if (!ready || !user?.email) return;
+
+    let cancelled = false;
+
+    async function loadCloudOnStart() {
+      try {
+        const response = await fetch('/api/db/snapshot', { cache: 'no-store' });
+        const payload = await response.json();
+
+        if (cancelled) return;
+
+        if (!response.ok) {
+          setCloudStatus((current) => ({
+            ...current,
+            configured: payload?.code !== 'DATABASE_NOT_CONFIGURED',
+            connected: false,
+            error: payload?.error || 'No se pudo consultar PostgreSQL.',
+          }));
+          return;
+        }
+
+        const nextStatus = payload.status || {
+          configured: true,
+          connected: true,
+          active: Boolean(payload.active),
+          revision: Number(payload.revision || 0),
+          ledger: { count: 0, income: 0, expense: 0, result: 0 },
+        };
+
+        setCloudStatus(nextStatus);
+
+        const revision = Number(payload.revision ?? nextStatus.revision ?? 0);
+        cloudRevisionRef.current = revision;
+        setCloudRevision(revision);
+
+        if (!payload.active) {
+          setCloudMode(false);
+          setCloudSyncState('local');
+          return;
+        }
+
+        cloudSkipNextSyncRef.current = true;
+
+        setMovements(Array.isArray(payload.movements) ? payload.movements : []);
+        setHours(Array.isArray(payload.hours) ? payload.hours : []);
+        setSaldoSnapshot({
+          ...initialSaldoSnapshot,
+          ...(payload.saldoSnapshot || {}),
+        });
+        setInstitutions(Array.isArray(payload.institutions) ? payload.institutions : []);
+        setInvestments(Array.isArray(payload.investments) ? payload.investments : []);
+        setConcepts(Array.isArray(payload.concepts) ? payload.concepts : []);
+        setAuditLog(Array.isArray(payload.auditLog) ? payload.auditLog : []);
+
+        setCloudConflict('');
+        setCloudMode(true);
+        setCloudSyncState('synced');
+      } catch (error) {
+        if (cancelled) return;
+        console.error('Cloud startup load failed', error);
+        setCloudStatus((current) => ({
+          ...current,
+          connected: false,
+          error: 'No se pudo conectar con PostgreSQL.',
+        }));
+      }
+    }
+
+    loadCloudOnStart();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, user?.email]);
 
   useEffect(() => {
     if (!ready) return;
@@ -304,6 +401,50 @@ export default function AccountingApp({ user = null }) {
     if (!ready) return;
     saveStored('puente.auditLog', auditLog);
   }, [auditLog, ready]);
+
+  useEffect(() => {
+    if (!ready || !cloudMode || cloudConflict) return;
+
+    if (cloudSkipNextSyncRef.current) {
+      cloudSkipNextSyncRef.current = false;
+      return;
+    }
+
+    cloudPendingRef.current = {
+      movements,
+      hours,
+      saldoSnapshot,
+      institutions,
+      investments,
+      concepts,
+      auditLog,
+    };
+
+    if (cloudSyncTimerRef.current) {
+      clearTimeout(cloudSyncTimerRef.current);
+    }
+
+    cloudSyncTimerRef.current = setTimeout(() => {
+      runCloudSync();
+    }, 900);
+
+    return () => {
+      if (cloudSyncTimerRef.current) {
+        clearTimeout(cloudSyncTimerRef.current);
+      }
+    };
+  }, [
+    movements,
+    hours,
+    saldoSnapshot,
+    institutions,
+    investments,
+    concepts,
+    auditLog,
+    ready,
+    cloudMode,
+    cloudConflict,
+  ]);
 
   useEffect(() => {
     if (!ready || !user?.email) return;
@@ -1083,6 +1224,177 @@ export default function AccountingApp({ user = null }) {
     setQuery('');
   }
 
+  async function runCloudSync() {
+    if (cloudSyncingRef.current || !cloudPendingRef.current || !cloudMode) return;
+
+    const snapshot = cloudPendingRef.current;
+    cloudPendingRef.current = null;
+    cloudSyncingRef.current = true;
+    setCloudSyncState('syncing');
+
+    try {
+      const response = await fetch('/api/db/snapshot', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          baseRevision: cloudRevisionRef.current,
+          snapshot,
+        }),
+      });
+
+      const payload = await response.json();
+
+      if (response.status === 409 && payload?.code === 'REVISION_CONFLICT') {
+        const message = payload.error || 'La nube tiene una versión más nueva.';
+        setCloudConflict(message);
+        setCloudSyncState('conflict');
+        cloudPendingRef.current = null;
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(payload?.error || 'CLOUD_SYNC_FAILED');
+      }
+
+      const nextRevision = Number(payload.revision || cloudRevisionRef.current);
+      cloudRevisionRef.current = nextRevision;
+      setCloudRevision(nextRevision);
+      setCloudStatus((current) => ({
+        ...current,
+        connected: true,
+        active: true,
+        revision: nextRevision,
+        updatedAt: new Date().toISOString(),
+        updatedBy: user?.email || user?.name || '',
+        ledger: {
+          count: Number(payload.summary?.count || 0),
+          income: Number(payload.summary?.income || 0),
+          expense: Number(payload.summary?.expense || 0),
+          result:
+            Number(payload.summary?.income || 0) -
+            Number(payload.summary?.expense || 0),
+        },
+      }));
+      setCloudSyncState('synced');
+    } catch (error) {
+      console.error('Cloud sync failed', error);
+      setCloudSyncState('error');
+    } finally {
+      cloudSyncingRef.current = false;
+
+      if (cloudPendingRef.current && !cloudConflict) {
+        setTimeout(() => runCloudSync(), 80);
+      }
+    }
+  }
+
+  async function reloadFromCloud() {
+    try {
+      setCloudSyncState('syncing');
+
+      const response = await fetch('/api/db/snapshot', { cache: 'no-store' });
+      const payload = await response.json();
+
+      if (!response.ok || !payload.active) {
+        throw new Error(payload?.error || 'CLOUD_RELOAD_FAILED');
+      }
+
+      cloudSkipNextSyncRef.current = true;
+      cloudPendingRef.current = null;
+
+      setMovements(Array.isArray(payload.movements) ? payload.movements : []);
+      setHours(Array.isArray(payload.hours) ? payload.hours : []);
+      setSaldoSnapshot({
+        ...initialSaldoSnapshot,
+        ...(payload.saldoSnapshot || {}),
+      });
+      setInstitutions(Array.isArray(payload.institutions) ? payload.institutions : []);
+      setInvestments(Array.isArray(payload.investments) ? payload.investments : []);
+      setConcepts(Array.isArray(payload.concepts) ? payload.concepts : []);
+      setAuditLog(Array.isArray(payload.auditLog) ? payload.auditLog : []);
+
+      const nextRevision = Number(payload.revision || 0);
+      cloudRevisionRef.current = nextRevision;
+      setCloudRevision(nextRevision);
+      setCloudStatus(payload.status || {
+        configured: true,
+        connected: true,
+        active: true,
+        revision: nextRevision,
+        ledger: summarize(payload.movements || {}),
+      });
+
+      setCloudConflict('');
+      setCloudMode(true);
+      setCloudSyncState('synced');
+    } catch (error) {
+      console.error('Cloud reload failed', error);
+      setCloudSyncState('error');
+    }
+  }
+
+  async function migrateLocalDataToCloud() {
+    if (user?.role !== 'admin') return;
+
+    const confirmed = confirm(
+      'Se copiarán los datos actuales de este navegador a PostgreSQL y se verificarán cantidad de movimientos, Entradas, Salidas y Resultado. Los datos locales no se borrarán. ¿Continuar?'
+    );
+
+    if (!confirmed) return;
+
+    setCloudMigrating(true);
+    setCloudMigrationReport(null);
+    setCloudConflict('');
+
+    const snapshot = {
+      movements,
+      hours,
+      saldoSnapshot,
+      institutions,
+      investments,
+      concepts,
+      auditLog,
+    };
+
+    try {
+      const response = await fetch('/api/db/migrate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ snapshot }),
+      });
+
+      const payload = await response.json();
+
+      if (!response.ok) {
+        setCloudMigrationReport(payload);
+        setCloudStatus(payload.status || cloudStatus);
+        alert(payload.error || 'No se pudo completar la migración.');
+        return;
+      }
+
+      const nextRevision = Number(payload.revision || 0);
+      cloudRevisionRef.current = nextRevision;
+      cloudSkipNextSyncRef.current = true;
+
+      setCloudRevision(nextRevision);
+      setCloudMigrationReport(payload);
+      setCloudStatus(payload.status || {
+        configured: true,
+        connected: true,
+        active: true,
+        revision: nextRevision,
+        ledger: payload.cloud,
+      });
+      setCloudMode(true);
+      setCloudSyncState('synced');
+    } catch (error) {
+      console.error('Cloud migration failed', error);
+      alert('No se pudo completar la migración a PostgreSQL.');
+    } finally {
+      setCloudMigrating(false);
+    }
+  }
+
   function selectExpenseConcept(name) {
     const next = expenseConceptFilter === name ? '' : name;
     setExpenseConceptFilter(next);
@@ -1590,6 +1902,18 @@ export default function AccountingApp({ user = null }) {
             <Header
               title="Configuración"
               subtitle="Administración de cuentas y conceptos utilizados en toda la aplicación."
+            />
+
+            <CloudDatabasePanel
+              user={user}
+              status={cloudStatus}
+              syncState={cloudSyncState}
+              conflict={cloudConflict}
+              localSummary={ledgerTotals}
+              migrationReport={cloudMigrationReport}
+              onMigrate={migrateLocalDataToCloud}
+              onReload={reloadFromCloud}
+              migrating={cloudMigrating}
             />
 
             <BackupTools
