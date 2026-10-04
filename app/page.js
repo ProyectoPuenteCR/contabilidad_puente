@@ -2,7 +2,6 @@ import { redirect } from 'next/navigation';
 import { auth } from '../auth';
 import { isAuthConfigured } from '../lib/auth-config';
 import AccountingApp from '../components/accounting-app';
-import AuthToolbar from '../components/auth-toolbar';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,10 +29,5 @@ export default async function Home() {
     redirect('/login');
   }
 
-  return (
-    <>
-      <AuthToolbar user={session.user} />
-      <AccountingApp />
-    </>
-  );
+  return <AccountingApp user={session.user} />;
 }
