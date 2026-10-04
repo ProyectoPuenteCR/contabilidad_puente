@@ -89,6 +89,121 @@ function summarize(rows) {
   );
 }
 
+function calculateSaldo(movements, snapshot) {
+  const byBank = new Map();
+
+  for (const row of movements) {
+    const bank = String(row.account || '').trim().toUpperCase();
+    if (!bank) continue;
+    byBank.set(
+      bank,
+      Number(byBank.get(bank) || 0) +
+        Number(row.income || 0) -
+        Number(row.expense || 0)
+    );
+  }
+
+  const bankValue = (name) => Number(byBank.get(name) || 0);
+
+  const futureReceivables = (snapshot?.futureReceivableItems || [])
+    .reduce((sum, value) => sum + Number(value || 0), 0);
+
+  const certification45 = (snapshot?.certification45Items || [])
+    .reduce(
+      (sum, item) =>
+        sum + Number(item?.hours || 0) * Number(item?.rate || 0),
+      0
+    );
+
+  const investmentPrincipal = (snapshot?.investmentPrincipalParts || [])
+    .reduce((sum, value) => sum + Number(value || 0), 0);
+  const investmentInterest = (snapshot?.investmentInterestParts || [])
+    .reduce((sum, value) => sum + Number(value || 0), 0);
+  const investmentMaturity = (snapshot?.investmentMaturityParts || [])
+    .reduce((sum, value) => sum + Number(value || 0), 0);
+
+  // Excel Saldo!C10:C14
+  const actualBanks = {
+    CREDICOOP: bankValue('CREDICOOP'),
+    'MERCADO LIBRE': bankValue('MERCADO LIBRE'),
+    'MERCADO LIBRE 2': bankValue('MERCADO LIBRE 2'),
+    EFECTIVO: bankValue('EFECTIVO'),
+    PREX: bankValue('PREX'),
+  };
+
+  // Excel Saldo!C4 = SUM(C10:C13)
+  const grossCurrent =
+    actualBanks.CREDICOOP +
+    actualBanks['MERCADO LIBRE'] +
+    actualBanks['MERCADO LIBRE 2'] +
+    actualBanks.EFECTIVO;
+
+  // Excel Saldo!C3 = C4 + E26, E26 = SUM(G28:G30)
+  const grossPlusReceivables = grossCurrent + futureReceivables;
+
+  const bankCash = Number(snapshot?.bankCash || 0);
+
+  // Excel Saldo!C6 = SUM(I5 + D11 + C13 + D12)
+  const available =
+    bankCash +
+    actualBanks['MERCADO LIBRE'] +
+    actualBanks.EFECTIVO +
+    actualBanks['MERCADO LIBRE 2'];
+
+  // Excel control column D/E.
+  const controlBanks = {
+    CREDICOOP: investmentMaturity + bankCash, // D10 = L12 + I5
+    'MERCADO LIBRE': actualBanks['MERCADO LIBRE'],
+    'MERCADO LIBRE 2': actualBanks['MERCADO LIBRE 2'],
+    EFECTIVO: actualBanks.EFECTIVO,
+    PREX: actualBanks.PREX,
+    'PERSONAL PAY': 0,
+  };
+
+  const bankRows = [
+    { name: 'CREDICOOP', value: actualBanks.CREDICOOP },
+    { name: 'MERCADO LIBRE', value: actualBanks['MERCADO LIBRE'] },
+    { name: 'MERCADO LIBRE 2', value: actualBanks['MERCADO LIBRE 2'] },
+    { name: 'EFECTIVO', value: actualBanks.EFECTIVO },
+    { name: 'PREX', value: actualBanks.PREX },
+    // C15 is blank in the original workbook.
+    { name: 'PERSONAL PAY', value: null },
+  ].map((bank) => {
+    const calculation = Number(controlBanks[bank.name] || 0);
+    const balance = bank.value == null ? 0 : calculation - bank.value;
+    return { ...bank, calculation, balance };
+  });
+
+  const monthExpense = Number(snapshot?.monthExpense || 0);
+  const monthIncome = Number(snapshot?.monthIncome || 0);
+  const monthBalance = monthIncome - monthExpense;
+  const expenseRatio = monthIncome ? monthExpense / monthIncome : 0;
+  const savingMargin = monthIncome ? 1 - expenseRatio : 0;
+
+  return {
+    status: grossCurrent === 0 ? 'NEGATIVO' : 'POSITIVO',
+    grossCurrent,
+    grossPlusReceivables,
+    available,
+    futureReceivables,
+    certification45,
+    bankRows,
+    banks: bankRows.map(({ name, value }) => ({ name, value })),
+    bankCash,
+    currentMonth: snapshot?.currentMonth || '',
+    monthExpense,
+    monthIncome,
+    monthBalance,
+    expenseRatio,
+    savingMargin,
+    salaryPayments: Number(snapshot?.salaryPayments || 0),
+    mercadoLibreCapitalization: Number(snapshot?.mercadoLibreCapitalization || 0),
+    investmentPrincipal,
+    investmentInterest,
+    investmentMaturity,
+  };
+}
+
 const nav = [
   ['book', 'Libro de contabilidad'],
   ['balance', 'Saldo'],
@@ -123,10 +238,29 @@ export default function AccountingApp() {
     const storedHours = loadStored('puente.hours', initialHours);
 
     const storedSaldoSnapshot = loadStored('puente.saldoSnapshot', null);
+    const mergedSaldoSnapshot = {
+      ...initialSaldoSnapshot,
+      ...(storedSaldoSnapshot || {}),
+      futureReceivableItems:
+        storedSaldoSnapshot?.futureReceivableItems ||
+        initialSaldoSnapshot.futureReceivableItems,
+      certification45Items:
+        storedSaldoSnapshot?.certification45Items ||
+        initialSaldoSnapshot.certification45Items,
+      investmentPrincipalParts:
+        storedSaldoSnapshot?.investmentPrincipalParts ||
+        initialSaldoSnapshot.investmentPrincipalParts,
+      investmentInterestParts:
+        storedSaldoSnapshot?.investmentInterestParts ||
+        initialSaldoSnapshot.investmentInterestParts,
+      investmentMaturityParts:
+        storedSaldoSnapshot?.investmentMaturityParts ||
+        initialSaldoSnapshot.investmentMaturityParts,
+    };
 
     setMovements(isLegacyDemoMovements(storedMovements) ? [] : storedMovements);
     setHours(isLegacyDemoHours(storedHours) ? [] : storedHours);
-    setSaldoSnapshot(storedSaldoSnapshot || initialSaldoSnapshot);
+    setSaldoSnapshot(mergedSaldoSnapshot);
     setDark(loadStored('puente.dark', false));
     setCompact(loadStored('puente.compact', false));
     setColumnWidths({
@@ -308,10 +442,14 @@ export default function AccountingApp() {
 
   const expenseAverage = expenses.length ? expenseTotal / expenses.length : 0;
 
-  const grossCurrent = saldoSnapshot?.grossCurrent;
-  const currentBalanceLabel = saldoSnapshot
-    ? money.format(grossCurrent || 0)
-    : 'Excel original';
+  const saldoCalculated = useMemo(
+    () => calculateSaldo(movements, saldoSnapshot),
+    [movements, saldoSnapshot]
+  );
+
+  const currentBalanceLabel = money.format(
+    saldoCalculated.grossCurrent || 0
+  );
 
   function saveMovement(data) {
     setMovements((prev) => [{ id: crypto.randomUUID(), ...data }, ...prev]);
@@ -413,51 +551,44 @@ export default function AccountingApp() {
                 label="Saldo actual bruto total"
                 value={currentBalanceLabel}
                 tone="blue"
-                hint={saldoSnapshot ? 'Incluye inversiones · hoja Saldo' : 'Datos recuperados del Excel original'}
+                hint="C4 = suma de saldos bancarios del Libro"
               />
               <Metric
                 label="Dinero disponible"
-                value={saldoSnapshot ? money.format(saldoSnapshot.available || 0) : 'Excel original'}
+                value={money.format(saldoCalculated.available || 0)}
                 tone="green"
-                hint={saldoSnapshot ? 'Disponibilidad informada en la hoja Saldo' : 'Valores recuperados del archivo original'}
+                hint="C6 = Cash + Mercado Libre + Efectivo + Mercado Libre 2"
               />
             </div>
 
-            {saldoSnapshot ? (
-              <section className="book-balance-labels" aria-label="Resumen financiero actual">
-                <div className="finance-label finance-label-wide">
-                  <span>Saldo bruto + eCheq a cobrar</span>
-                  <strong>{money.format(saldoSnapshot.grossPlusReceivables || 0)}</strong>
-                </div>
-
-                <div className="finance-label">
-                  <span>Futuros cobros</span>
-                  <strong>{money.format(saldoSnapshot.futureReceivables || 0)}</strong>
-                </div>
-
-                <div className="finance-label">
-                  <span>Certificación a registrar (45 D)</span>
-                  <strong>{money.format(saldoSnapshot.certification45 || 0)}</strong>
-                </div>
-
-                <div className="bank-labels">
-                  {(saldoSnapshot.banks || []).map((bank) => (
-                    <div
-                      className={`bank-label bank-${String(bank.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
-                      key={bank.name}
-                    >
-                      <span>{bank.name}</span>
-                      <strong>{money.format(bank.value || 0)}</strong>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            ) : (
-              <div className="data-warning book-saldo-warning">
-                Datos recuperados del Excel original para mostrar aquí el <strong>Saldo actual</strong>,
-                <strong> Dinero disponible</strong> y los saldos por banco.
+            <section className="book-balance-labels" aria-label="Resumen financiero actual">
+              <div className="finance-label finance-label-wide">
+                <span>Saldo bruto + eCheq a cobrar</span>
+                <strong>{money.format(saldoCalculated.grossPlusReceivables)}</strong>
               </div>
-            )}
+
+              <div className="finance-label">
+                <span>Futuros cobros</span>
+                <strong>{money.format(saldoCalculated.futureReceivables)}</strong>
+              </div>
+
+              <div className="finance-label">
+                <span>Certificación a registrar (45 D)</span>
+                <strong>{money.format(saldoCalculated.certification45)}</strong>
+              </div>
+
+              <div className="bank-labels">
+                {saldoCalculated.banks.map((bank) => (
+                  <div
+                    className={`bank-label bank-${String(bank.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+                    key={bank.name}
+                  >
+                    <span>{bank.name}</span>
+                    <strong>{bank.value == null ? '' : money.format(bank.value)}</strong>
+                  </div>
+                ))}
+              </div>
+            </section>
 
             <ExcelTools
               movements={movements}
@@ -607,88 +738,91 @@ export default function AccountingApp() {
               </div>
             </div>
 
-            {!saldoSnapshot ? (
-              <div className="data-warning">
-                Reimporte el archivo original para incorporar la hoja <strong>Saldo</strong>.
-                Los movimientos ya cargados no contienen estos indicadores.
+            <>
+              <section className="hero-balance">
+                <div>
+                  <span>Saldo actual bruto total</span>
+                  <strong>{money.format(saldoCalculated.grossCurrent)}</strong>
+                  <small>Calculado desde el Libro de contabilidad · misma fórmula de Excel C4</small>
+                </div>
+                <div className="hero-icon">▰</div>
+              </section>
+
+              <div className="grid-4">
+                <Metric
+                  label="Saldo bruto + eCheq a cobrar"
+                  value={money.format(saldoCalculated.grossPlusReceivables)}
+                  tone="blue"
+                />
+                <Metric
+                  label="Dinero disponible"
+                  value={money.format(saldoCalculated.available)}
+                  tone="green"
+                />
+                <Metric
+                  label="Futuros cobros"
+                  value={money.format(saldoCalculated.futureReceivables)}
+                  tone="amber"
+                />
+                <Metric
+                  label="Certificación a registrar (45 D)"
+                  value={money.format(saldoCalculated.certification45)}
+                  tone="blue"
+                />
               </div>
-            ) : (
-              <>
-                <section className="hero-balance">
-                  <div>
-                    <span>Saldo actual bruto total</span>
-                    <strong>{money.format(saldoSnapshot.grossCurrent)}</strong>
-                    <small>Incluye inversiones · valor de la hoja Saldo</small>
+
+              <div className="grid-2">
+                <Card title="Bancos · igual que hoja Saldo">
+                  <div className="saldo-bank-table">
+                    <div className="saldo-bank-head">
+                      <span>Banco</span>
+                      <span>Valor Actual</span>
+                      <span>Cálculo</span>
+                      <span>Balance</span>
+                    </div>
+                    {saldoCalculated.bankRows.map((bank) => (
+                      <div className="saldo-bank-row" key={bank.name}>
+                        <strong>{bank.name}</strong>
+                        <span>{bank.value == null ? '' : money.format(bank.value)}</span>
+                        <span>{money.format(bank.calculation)}</span>
+                        <span className={Math.abs(bank.balance) < 0.005 ? 'balance-ok' : 'balance-review'}>
+                          {money.format(bank.balance)}
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                  <div className="hero-icon">▰</div>
-                </section>
+                </Card>
 
-                <div className="grid-4">
-                  <Metric
-                    label="Saldo bruto + eCheq a cobrar"
-                    value={money.format(saldoSnapshot.grossPlusReceivables)}
-                    tone="blue"
-                  />
-                  <Metric
-                    label="Dinero disponible"
-                    value={money.format(saldoSnapshot.available)}
-                    tone="green"
-                  />
-                  <Metric
-                    label="Futuros cobros"
-                    value={money.format(saldoSnapshot.futureReceivables)}
-                    tone="amber"
-                  />
-                  <Metric
-                    label="Certificación a registrar (45 D)"
-                    value={money.format(saldoSnapshot.certification45)}
-                    tone="blue"
-                  />
-                </div>
+                <Card title={`Mes en curso · ${saldoCalculated.currentMonth || '-'}`}>
+                  <div className="balance-list">
+                    <div><span>Gasto de este mes</span><strong className="expense">{money.format(saldoCalculated.monthExpense)}</strong></div>
+                    <div><span>Ingresos brutos</span><strong className="income">{money.format(saldoCalculated.monthIncome)}</strong></div>
+                    <div><span>Saldo del mes</span><strong>{money.format(saldoCalculated.monthBalance)}</strong></div>
+                    <div><span>Gasto sobre ingresos</span><strong>{percent.format(saldoCalculated.expenseRatio || 0)}</strong></div>
+                    <div><span>Margen de ahorro</span><strong>{percent.format(saldoCalculated.savingMargin || 0)}</strong></div>
+                    <div><span>Pagos en salarios</span><strong>{money.format(saldoCalculated.salaryPayments)}</strong></div>
+                  </div>
+                </Card>
+              </div>
 
-                <div className="grid-2">
-                  <Card title="Bancos · valor actual">
-                    <div className="balance-list">
-                      {(saldoSnapshot.banks || []).map((bank) => (
-                        <div key={bank.name}>
-                          <span>{bank.name}</span>
-                          <strong>{money.format(bank.value)}</strong>
-                        </div>
-                      ))}
-                    </div>
-                  </Card>
-
-                  <Card title={`Mes en curso · ${saldoSnapshot.currentMonth || '-'}`}>
-                    <div className="balance-list">
-                      <div><span>Gasto de este mes</span><strong className="expense">{money.format(saldoSnapshot.monthExpense)}</strong></div>
-                      <div><span>Ingresos brutos</span><strong className="income">{money.format(saldoSnapshot.monthIncome)}</strong></div>
-                      <div><span>Saldo del mes</span><strong>{money.format(saldoSnapshot.monthBalance)}</strong></div>
-                      <div><span>Gasto sobre ingresos</span><strong>{percent.format(saldoSnapshot.expenseRatio || 0)}</strong></div>
-                      <div><span>Margen de ahorro</span><strong>{percent.format(saldoSnapshot.savingMargin || 0)}</strong></div>
-                      <div><span>Pagos en salarios</span><strong>{money.format(saldoSnapshot.salaryPayments)}</strong></div>
-                    </div>
-                  </Card>
-                </div>
-
-                <div className="grid-3">
-                  <Metric
-                    label="Monto invertido"
-                    value={money.format(saldoSnapshot.investmentPrincipal || 0)}
-                    tone="blue"
-                  />
-                  <Metric
-                    label="Interés estimado"
-                    value={money.format(saldoSnapshot.investmentInterest || 0)}
-                    tone="green"
-                  />
-                  <Metric
-                    label="Monto a reembolsar"
-                    value={money.format(saldoSnapshot.investmentMaturity || 0)}
-                    tone="amber"
-                  />
-                </div>
-              </>
-            )}
+              <div className="grid-3">
+                <Metric
+                  label="Monto invertido"
+                  value={money.format(saldoCalculated.investmentPrincipal || 0)}
+                  tone="blue"
+                />
+                <Metric
+                  label="Interés estimado"
+                  value={money.format(saldoCalculated.investmentInterest || 0)}
+                  tone="green"
+                />
+                <Metric
+                  label="Monto a reembolsar"
+                  value={money.format(saldoCalculated.investmentMaturity || 0)}
+                  tone="amber"
+                />
+              </div>
+            </>
           </>
         )}
 
