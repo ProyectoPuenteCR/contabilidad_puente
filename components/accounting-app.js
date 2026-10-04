@@ -648,6 +648,10 @@ export default function AccountingApp() {
       setSaldoSnapshot((prev) => ({ ...prev, ...payload.saldoSnapshot }));
     }
 
+    if (Array.isArray(payload.investments) && payload.investments.length) {
+      setInvestments(payload.investments);
+    }
+
     const importedAccounts = [...new Set(imported.map((row) => String(row.account || '').trim()).filter(Boolean))];
     const importedConcepts = [...new Set(imported.map((row) => String(row.concept || '').trim()).filter(Boolean))];
 
