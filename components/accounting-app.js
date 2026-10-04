@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import { useEffect, useMemo, useState } from 'react';
-import { accounts, initialHours, initialMovements, initialSaldoSnapshot } from '../lib/seed';
+import { accounts, initialHours, initialMovements, initialSaldoSnapshot, initialInstitutions } from '../lib/seed';
 import ExcelTools from './excel-tools';
 
 const money = new Intl.NumberFormat('es-AR', {
@@ -207,15 +207,19 @@ function calculateSaldo(movements, snapshot) {
 const nav = [
   ['book', 'Libro de contabilidad'],
   ['balance', 'Saldo'],
+  ['statistics', 'Estadísticas'],
   ['expenses', 'Gastos'],
   ['hours', 'Horas'],
+  ['settings', 'Configuración'],
 ];
 
 const icons = {
   book: '▤',
   balance: '◈',
+  statistics: '▥',
   expenses: '▣',
   hours: '◷',
+  settings: '⚙',
 };
 
 export default function AccountingApp() {
@@ -223,6 +227,9 @@ export default function AccountingApp() {
   const [movements, setMovements] = useState(initialMovements);
   const [hours, setHours] = useState(initialHours);
   const [saldoSnapshot, setSaldoSnapshot] = useState(initialSaldoSnapshot);
+  const [institutions, setInstitutions] = useState(initialInstitutions);
+  const [concepts, setConcepts] = useState([]);
+  const [editingMovement, setEditingMovement] = useState(null);
   const [ready, setReady] = useState(false);
   const [query, setQuery] = useState('');
   const [account, setAccount] = useState('TODAS');
@@ -236,31 +243,31 @@ export default function AccountingApp() {
   useEffect(() => {
     const storedMovements = loadStored('puente.movements', initialMovements);
     const storedHours = loadStored('puente.hours', initialHours);
-
     const storedSaldoSnapshot = loadStored('puente.saldoSnapshot', null);
-    const mergedSaldoSnapshot = {
-      ...initialSaldoSnapshot,
-      ...(storedSaldoSnapshot || {}),
-      futureReceivableItems:
-        storedSaldoSnapshot?.futureReceivableItems ||
-        initialSaldoSnapshot.futureReceivableItems,
-      certification45Items:
-        storedSaldoSnapshot?.certification45Items ||
-        initialSaldoSnapshot.certification45Items,
-      investmentPrincipalParts:
-        storedSaldoSnapshot?.investmentPrincipalParts ||
-        initialSaldoSnapshot.investmentPrincipalParts,
-      investmentInterestParts:
-        storedSaldoSnapshot?.investmentInterestParts ||
-        initialSaldoSnapshot.investmentInterestParts,
-      investmentMaturityParts:
-        storedSaldoSnapshot?.investmentMaturityParts ||
-        initialSaldoSnapshot.investmentMaturityParts,
-    };
+    const storedInstitutions = loadStored('puente.institutions', initialInstitutions);
+    const storedConcepts = loadStored('puente.concepts', null);
 
-    setMovements(isLegacyDemoMovements(storedMovements) ? [] : storedMovements);
+    const cleanMovements = isLegacyDemoMovements(storedMovements) ? [] : storedMovements;
+    const movementAccounts = [...new Set(cleanMovements.map((m) => String(m.account || '').trim()).filter(Boolean))];
+    const configuredNames = new Set((storedInstitutions || []).map((item) => String(item.name || '').toUpperCase()));
+    const autoInstitutions = movementAccounts
+      .filter((name) => !configuredNames.has(name.toUpperCase()))
+      .map((name) => ({
+        id: `auto-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+        name,
+        type: 'Otro',
+        active: true,
+      }));
+
+    const initialConceptList = [...new Set(
+      cleanMovements.map((m) => String(m.concept || '').trim()).filter(Boolean)
+    )].sort((a, b) => a.localeCompare(b, 'es'));
+
+    setMovements(cleanMovements);
     setHours(isLegacyDemoHours(storedHours) ? [] : storedHours);
-    setSaldoSnapshot(mergedSaldoSnapshot);
+    setSaldoSnapshot({ ...initialSaldoSnapshot, ...(storedSaldoSnapshot || {}) });
+    setInstitutions([...(storedInstitutions || initialInstitutions), ...autoInstitutions]);
+    setConcepts(Array.isArray(storedConcepts) && storedConcepts.length ? storedConcepts : initialConceptList);
     setDark(loadStored('puente.dark', false));
     setCompact(loadStored('puente.compact', false));
     setColumnWidths({
@@ -300,16 +307,28 @@ export default function AccountingApp() {
     saveStored('puente.ledgerColumnWidths', columnWidths);
   }, [columnWidths, ready]);
 
+  useEffect(() => {
+    if (!ready) return;
+    saveStored('puente.institutions', institutions);
+  }, [institutions, ready]);
+
+  useEffect(() => {
+    if (!ready) return;
+    saveStored('puente.concepts', concepts);
+  }, [concepts, ready]);
+
   const availableAccounts = useMemo(
-    () => [...new Set([...accounts, ...movements.map((m) => m.account).filter(Boolean)])]
+    () => institutions
+      .filter((item) => item.active !== false)
+      .map((item) => item.name)
+      .filter(Boolean)
       .sort((a, b) => a.localeCompare(b, 'es')),
-    [movements]
+    [institutions]
   );
 
   const availableConcepts = useMemo(
-    () => [...new Set(movements.map((m) => String(m.concept || '').trim()).filter(Boolean))]
-      .sort((a, b) => a.localeCompare(b, 'es')),
-    [movements]
+    () => concepts.slice().sort((a, b) => a.localeCompare(b, 'es')),
+    [concepts]
   );
 
   const availableYears = useMemo(
