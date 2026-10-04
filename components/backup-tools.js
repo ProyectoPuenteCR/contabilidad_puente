@@ -182,13 +182,21 @@ export default function BackupTools({
           ConceptoAnterior: row.oldConcept || '',
           ConceptoNuevo: row.newConcept || '',
           Motivo: row.reason || '',
+          EntradaAntes: Number(row.previousIncome || 0),
+          EntradaDespues: Number(row.newIncome ?? row.previousIncome ?? 0),
+          SalidaAntes: Number(row.previousExpense || 0),
+          SalidaDespues: Number(row.newExpense ?? row.previousExpense ?? 0),
+          ResultadoAntes: Number(row.previousResult || 0),
+          ResultadoDespues: Number(row.newResult ?? row.previousResult ?? 0),
+          MovimientosConImportesCorregidos: Number(row.changedValueCount || 0),
+          DetalleCambiosImportes: JSON.stringify(safeRows(row.valueChanges)),
           CuentaFiltro: row.account || '',
           AnioFiltro: row.year || '',
           RegistrosAfectados: Number(row.affectedCount || 0),
           IDsAfectados: safeRows(row.affectedIds).join(', '),
           ID: row.id || '',
         })),
-        [24, 24, 34, 28, 32, 32, 60, 22, 14, 18, 80, 38]
+        [24, 24, 34, 28, 32, 32, 60, 18, 18, 18, 18, 18, 18, 22, 90, 22, 14, 18, 80, 38]
       );
 
       if (users.length) {
