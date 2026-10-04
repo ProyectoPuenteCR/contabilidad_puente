@@ -461,6 +461,38 @@ export default function AccountingApp({ user = null }) {
       .sort((a, b) => Number(b.year) - Number(a.year));
   }, [filteredWithoutYear]);
 
+  const incomeExpenseComparison = useMemo(() => {
+    if (year === 'TODOS') {
+      return yearlyStats
+        .slice()
+        .sort((a, b) => Number(a.year) - Number(b.year))
+        .map((item) => ({
+          key: item.year,
+          label: item.year,
+          income: Number(item.income || 0),
+          expense: Number(item.expense || 0),
+        }));
+    }
+
+    const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    const monthMap = Array.from({ length: 12 }, (_, index) => ({
+      key: `${year}-${String(index + 1).padStart(2, '0')}`,
+      label: monthNames[index],
+      income: 0,
+      expense: 0,
+    }));
+
+    for (const row of filtered) {
+      const monthIndex = Number(String(row.date || '').slice(5, 7)) - 1;
+      if (monthIndex < 0 || monthIndex > 11) continue;
+
+      monthMap[monthIndex].income += Number(row.income || 0);
+      monthMap[monthIndex].expense += Number(row.expense || 0);
+    }
+
+    return monthMap;
+  }, [year, yearlyStats, filtered]);
+
   const expenseAverage = expenses.length ? expenseTotal / expenses.length : 0;
 
   const statisticsConcepts = useMemo(() => {
@@ -1219,6 +1251,13 @@ export default function AccountingApp({ user = null }) {
                 </button>
               </div>
             )}
+
+            <Card title={year === 'TODOS' ? 'Ingresos vs egresos · comparativa anual' : `Ingresos vs egresos · ${year}`}>
+              <IncomeExpenseChart
+                data={incomeExpenseComparison}
+                periodLabel={year === 'TODOS' ? 'Año' : 'Mes'}
+              />
+            </Card>
 
             <Card title="Evolución anual">
               <div className="table-wrap">
@@ -2003,6 +2042,84 @@ function ExpenseTable({
         </table>
       </div>
     </>
+  );
+}
+
+function IncomeExpenseChart({ data, periodLabel }) {
+  const max = Math.max(
+    1,
+    ...data.flatMap((item) => [
+      Number(item.income || 0),
+      Number(item.expense || 0),
+    ])
+  );
+
+  const totalIncome = data.reduce((sum, item) => sum + Number(item.income || 0), 0);
+  const totalExpense = data.reduce((sum, item) => sum + Number(item.expense || 0), 0);
+  const result = totalIncome - totalExpense;
+
+  return (
+    <div className="income-expense-chart">
+      <div className="income-expense-chart-head">
+        <div className="income-expense-legend">
+          <span><i className="income-dot" />Ingresos</span>
+          <span><i className="expense-dot" />Egresos</span>
+        </div>
+
+        <div className="income-expense-chart-summary">
+          <span>
+            Resultado del filtro
+            <strong className={result >= 0 ? 'income' : 'expense'}>
+              {money.format(result)}
+            </strong>
+          </span>
+        </div>
+      </div>
+
+      <div className="income-expense-plot" role="img" aria-label="Gráfico comparativo de ingresos y egresos">
+        {data.map((item) => {
+          const incomeHeight = Math.max(0, (Number(item.income || 0) / max) * 100);
+          const expenseHeight = Math.max(0, (Number(item.expense || 0) / max) * 100);
+
+          return (
+            <div className="income-expense-period" key={item.key}>
+              <div className="income-expense-bars">
+                <div
+                  className="income-expense-bar income-bar"
+                  style={{ height: `${incomeHeight}%` }}
+                  title={`${periodLabel} ${item.label} · Ingresos: ${money.format(item.income || 0)}`}
+                >
+                  <span>{money.format(item.income || 0)}</span>
+                </div>
+                <div
+                  className="income-expense-bar expense-bar"
+                  style={{ height: `${expenseHeight}%` }}
+                  title={`${periodLabel} ${item.label} · Egresos: ${money.format(item.expense || 0)}`}
+                >
+                  <span>{money.format(item.expense || 0)}</span>
+                </div>
+              </div>
+              <strong className="income-expense-label">{item.label}</strong>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="income-expense-totals">
+        <div>
+          <span>Ingresos del período</span>
+          <strong className="income">{money.format(totalIncome)}</strong>
+        </div>
+        <div>
+          <span>Egresos del período</span>
+          <strong className="expense">{money.format(totalExpense)}</strong>
+        </div>
+        <div>
+          <span>Diferencia</span>
+          <strong className={result >= 0 ? 'income' : 'expense'}>{money.format(result)}</strong>
+        </div>
+      </div>
+    </div>
   );
 }
 
