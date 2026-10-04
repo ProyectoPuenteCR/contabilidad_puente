@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { accounts, initialHours, initialMovements, initialSaldoSnapshot, initialInstitutions, initialInvestments } from '../lib/seed';
 import ExcelTools from './excel-tools';
 import InvestmentsPanel from './investments-panel';
@@ -210,6 +210,8 @@ export default function AccountingApp({ user = null }) {
   const [modal, setModal] = useState(null);
   const [dark, setDark] = useState(false);
   const [compact, setCompact] = useState(false);
+  const [expenseConceptFilter, setExpenseConceptFilter] = useState('');
+  const expenseTableRef = useRef(null);
   const [columnWidths, setColumnWidths] = useState(DEFAULT_WIDTHS);
 
   useEffect(() => {
@@ -312,6 +314,10 @@ export default function AccountingApp({ user = null }) {
       body: JSON.stringify({ module: section }),
     }).catch(() => {});
   }, [section, ready, user?.email]);
+
+  useEffect(() => {
+    setExpenseConceptFilter('');
+  }, [year, account, concept, query]);
 
   const availableAccounts = useMemo(
     () => institutions
@@ -933,6 +939,18 @@ export default function AccountingApp({ user = null }) {
     setQuery('');
   }
 
+  function selectExpenseConcept(name) {
+    const next = expenseConceptFilter === name ? '' : name;
+    setExpenseConceptFilter(next);
+
+    requestAnimationFrame(() => {
+      expenseTableRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+    });
+  }
+
   function resetColumnWidths() {
     setColumnWidths(DEFAULT_WIDTHS);
   }
@@ -1361,47 +1379,46 @@ export default function AccountingApp({ user = null }) {
 
             <div className="grid-2">
               <Card title={year === 'TODOS' ? 'Gastos por concepto · período filtrado' : `Gastos por concepto · ${year}`}>
-                <Bars data={categoryExpenses} />
+                <Bars
+                  data={categoryExpenses}
+                  selected={expenseConceptFilter}
+                  onSelect={selectExpenseConcept}
+                />
               </Card>
 
               <Card title="Participación por concepto">
                 <div className="concept-share">
                   {categoryExpenses.map(([name, value]) => (
-                    <div className="concept-share-row" key={name}>
+                    <button
+                      type="button"
+                      className={expenseConceptFilter === name
+                        ? 'concept-share-row concept-share-button selected'
+                        : 'concept-share-row concept-share-button'}
+                      key={name}
+                      onClick={() => selectExpenseConcept(name)}
+                      title={`Filtrar la grilla por ${name}`}
+                    >
                       <span title={name}>{name}</span>
                       <div className="concept-share-track">
                         <i style={{ width: expenseTotal ? `${Math.max(2, (value / expenseTotal) * 100)}%` : '0%' }} />
                       </div>
                       <b>{expenseTotal ? percent.format(value / expenseTotal) : '0,0 %'}</b>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </Card>
             </div>
 
             <Card>
-              <div className={compact ? 'table-wrap compact-table' : 'table-wrap'}>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Fecha</th><th>Cuenta</th><th>Concepto</th><th>Detalle</th>
-                      <th>Factura</th><th>Monto</th><th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {expenses.map((m) => (
-                      <tr key={m.id}>
-                        <td>{formatDate(m.date)}</td>
-                        <td>{m.account}</td>
-                        <td>{m.concept}</td>
-                        <td>{m.detail}</td>
-                        <td>{m.invoice || '-'}</td>
-                        <td className="expense money-cell">{money.format(m.expense)}</td>
-                        <td><button className="icon-btn danger" onClick={() => removeMovement(m.id)}>×</button></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div ref={expenseTableRef}>
+                <ExpenseTable
+                  rows={expenses}
+                  compact={compact}
+                  conceptFilter={expenseConceptFilter}
+                  setConceptFilter={setExpenseConceptFilter}
+                  onDelete={removeMovement}
+                  onEdit={openEditMovement}
+                />
               </div>
             </Card>
           </>
@@ -1732,18 +1749,260 @@ function Card({ title, children }) {
   return <section className="card">{title && <h3>{title}</h3>}{children}</section>;
 }
 
-function Bars({ data }) {
+function Bars({ data, onSelect, selected = '' }) {
   const max = Math.max(...data.map((x) => x[1]), 1);
 
   return (
-    <div className="bars">
+    <div className="bars expense-bars">
       {data.map(([name, value]) => (
-        <div key={name}>
+        <button
+          type="button"
+          className={selected === name ? 'expense-bar-item selected' : 'expense-bar-item'}
+          key={name}
+          onClick={() => onSelect?.(name)}
+          title={`Filtrar grilla por ${name}`}
+        >
           <div><span title={name}>{name}</span><b>{money.format(value)}</b></div>
           <div className="bar"><i style={{ width: `${(value / max) * 100}%` }} /></div>
-        </div>
+        </button>
       ))}
     </div>
+  );
+}
+
+function ExpenseTable({
+  rows,
+  compact,
+  conceptFilter,
+  setConceptFilter,
+  onDelete,
+  onEdit,
+}) {
+  const [detailFilter, setDetailFilter] = useState('');
+  const [sortKey, setSortKey] = useState('date');
+  const [sortDirection, setSortDirection] = useState('desc');
+
+  const conceptOptions = useMemo(
+    () => [...new Set(rows.map((row) => String(row.concept || '').trim()).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, 'es')),
+    [rows]
+  );
+
+  const detailOptions = useMemo(
+    () => [...new Set(rows.map((row) => String(row.detail || '').trim()).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, 'es')),
+    [rows]
+  );
+
+  const visibleRows = useMemo(() => {
+    const conceptQuery = String(conceptFilter || '').trim().toLowerCase();
+    const detailQuery = String(detailFilter || '').trim().toLowerCase();
+
+    const filteredRows = rows.filter((row) => {
+      if (
+        conceptQuery &&
+        !String(row.concept || '').toLowerCase().includes(conceptQuery)
+      ) {
+        return false;
+      }
+
+      if (
+        detailQuery &&
+        !String(row.detail || '').toLowerCase().includes(detailQuery)
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+
+    const direction = sortDirection === 'asc' ? 1 : -1;
+
+    return filteredRows.slice().sort((a, b) => {
+      if (sortKey === 'expense') {
+        return (Number(a.expense || 0) - Number(b.expense || 0)) * direction;
+      }
+
+      if (sortKey === 'date') {
+        return String(a.date || '').localeCompare(String(b.date || '')) * direction;
+      }
+
+      return String(a[sortKey] || '').localeCompare(
+        String(b[sortKey] || ''),
+        'es',
+        { sensitivity: 'base' }
+      ) * direction;
+    });
+  }, [rows, conceptFilter, detailFilter, sortKey, sortDirection]);
+
+  const visibleTotal = useMemo(
+    () => visibleRows.reduce((sum, row) => sum + Number(row.expense || 0), 0),
+    [visibleRows]
+  );
+
+  function toggleSort(key) {
+    if (sortKey === key) {
+      setSortDirection((current) => current === 'desc' ? 'asc' : 'desc');
+    } else {
+      setSortKey(key);
+      setSortDirection(key === 'expense' || key === 'date' ? 'desc' : 'asc');
+    }
+  }
+
+  function sortIndicator(key) {
+    if (sortKey !== key) return '↕';
+    return sortDirection === 'desc' ? '↓' : '↑';
+  }
+
+  return (
+    <>
+      <div className="expense-grid-summary">
+        <div>
+          <span>Registros visibles</span>
+          <strong>{number.format(visibleRows.length)}</strong>
+        </div>
+        <div className="expense-grid-sum">
+          <span>Suma de montos filtrados</span>
+          <strong>{money.format(visibleTotal)}</strong>
+        </div>
+        {(conceptFilter || detailFilter) && (
+          <button
+            type="button"
+            className="secondary small"
+            onClick={() => {
+              setConceptFilter('');
+              setDetailFilter('');
+            }}
+          >
+            Limpiar filtros
+          </button>
+        )}
+      </div>
+
+      <div className={compact ? 'table-wrap compact-table' : 'table-wrap'}>
+        <table className="expense-detail-table">
+          <thead>
+            <tr className="expense-sort-row">
+              <th>
+                <button type="button" onClick={() => toggleSort('date')}>
+                  Fecha <span>{sortIndicator('date')}</span>
+                </button>
+              </th>
+              <th>
+                <button type="button" onClick={() => toggleSort('account')}>
+                  Cuenta <span>{sortIndicator('account')}</span>
+                </button>
+              </th>
+              <th>
+                <button type="button" onClick={() => toggleSort('concept')}>
+                  Concepto <span>{sortIndicator('concept')}</span>
+                </button>
+              </th>
+              <th>
+                <button type="button" onClick={() => toggleSort('detail')}>
+                  Detalle <span>{sortIndicator('detail')}</span>
+                </button>
+              </th>
+              <th>
+                <button type="button" onClick={() => toggleSort('invoice')}>
+                  Factura <span>{sortIndicator('invoice')}</span>
+                </button>
+              </th>
+              <th>
+                <button type="button" onClick={() => toggleSort('expense')}>
+                  Monto <span>{sortIndicator('expense')}</span>
+                </button>
+              </th>
+              <th></th>
+            </tr>
+
+            <tr className="expense-column-filters">
+              <th></th>
+              <th></th>
+              <th>
+                <input
+                  list="expense-concept-options"
+                  value={conceptFilter}
+                  onChange={(event) => setConceptFilter(event.target.value)}
+                  placeholder="Filtrar o escribir concepto…"
+                  aria-label="Filtrar concepto"
+                />
+                <datalist id="expense-concept-options">
+                  {conceptOptions.map((item) => <option key={item} value={item} />)}
+                </datalist>
+              </th>
+              <th>
+                <input
+                  list="expense-detail-options"
+                  value={detailFilter}
+                  onChange={(event) => setDetailFilter(event.target.value)}
+                  placeholder="Filtrar o escribir detalle…"
+                  aria-label="Filtrar detalle"
+                />
+                <datalist id="expense-detail-options">
+                  {detailOptions.map((item) => <option key={item} value={item} />)}
+                </datalist>
+              </th>
+              <th></th>
+              <th className="expense-filter-total-label">
+                Σ {money.format(visibleTotal)}
+              </th>
+              <th></th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {visibleRows.map((m) => (
+              <tr
+                key={m.id}
+                className="editable-ledger-row"
+                onClick={() => onEdit?.(m)}
+                title="Clic para editar el movimiento"
+              >
+                <td>{formatDate(m.date)}</td>
+                <td>{m.account}</td>
+                <td>{m.concept}</td>
+                <td className="expense-detail-cell" title={m.detail}>{m.detail}</td>
+                <td>{m.invoice || '-'}</td>
+                <td className="expense money-cell">{money.format(m.expense)}</td>
+                <td>
+                  <button
+                    className="icon-btn danger"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onDelete(m.id);
+                    }}
+                  >
+                    ×
+                  </button>
+                </td>
+              </tr>
+            ))}
+
+            {visibleRows.length === 0 && (
+              <tr>
+                <td colSpan={7} className="expense-empty-row">
+                  No hay gastos que coincidan con los filtros de la grilla.
+                </td>
+              </tr>
+            )}
+          </tbody>
+
+          <tfoot className="expense-table-total">
+            <tr>
+              <td colSpan={5}>
+                <strong>TOTAL FILTRADO</strong>
+                <span>{number.format(visibleRows.length)} movimientos</span>
+              </td>
+              <td className="expense money-cell">
+                <strong>{money.format(visibleTotal)}</strong>
+              </td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </>
   );
 }
 
