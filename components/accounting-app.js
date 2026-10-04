@@ -587,6 +587,10 @@ export default function AccountingApp({ user = null }) {
         .sort((a, b) => a.localeCompare(b, 'es')));
     }
 
+    if (concept === historicalEdit.oldConcept) {
+      setConcept(nextConcept);
+    }
+
     const logEntry = {
       id: crypto.randomUUID(),
       at: new Date().toISOString(),
