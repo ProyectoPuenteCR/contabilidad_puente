@@ -23,6 +23,8 @@ export default function BackupTools({
   user,
   movements,
   hours,
+  hourSpecialists,
+  hourServices,
   investments,
   institutions,
   concepts,
@@ -72,6 +74,8 @@ export default function BackupTools({
         { Campo: 'Email', Valor: user?.email || '' },
         { Campo: 'Movimientos', Valor: safeRows(movements).length },
         { Campo: 'Horas', Valor: safeRows(hours).length },
+        { Campo: 'Especialistas de horas', Valor: safeRows(hourSpecialists).length },
+        { Campo: 'Servicios / Proyectos de horas', Valor: safeRows(hourServices).length },
         { Campo: 'Inversiones', Valor: safeRows(investments).length },
         { Campo: 'Cuentas configuradas', Valor: safeRows(institutions).length },
         { Campo: 'Conceptos', Valor: safeRows(concepts).length },
@@ -117,6 +121,30 @@ export default function BackupTools({
           ID: row.id || '',
         })),
         [13, 28, 30, 12, 16, 16, 42, 38]
+      );
+
+      addSheet(
+        XLSX,
+        workbook,
+        'Especialistas horas',
+        safeRows(hourSpecialists).map((row) => ({
+          Especialista: row.name || '',
+          Activo: row.active !== false ? 'Si' : 'No',
+          ID: row.id || '',
+        })),
+        [36, 12, 38]
+      );
+
+      addSheet(
+        XLSX,
+        workbook,
+        'Servicios horas',
+        safeRows(hourServices).map((row) => ({
+          ServicioProyecto: row.name || '',
+          Activo: row.active !== false ? 'Si' : 'No',
+          ID: row.id || '',
+        })),
+        [40, 12, 38]
       );
 
       addSheet(
@@ -273,7 +301,7 @@ export default function BackupTools({
         <h3>Exportación completa del sistema</h3>
         <p>
           Genera un único archivo Excel con Libro de contabilidad, horas,
-          inversiones, cuentas, conceptos, Saldo auxiliar, auditoría y,
+          inversiones, cuentas, conceptos, especialistas, servicios/proyectos de horas, Saldo auxiliar, auditoría y,
           para administradores, seguridad y estadísticas disponibles.
         </p>
         {message && <small>{message}</small>}
