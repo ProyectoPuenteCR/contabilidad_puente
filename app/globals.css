@@ -2023,3 +2023,265 @@ button.small{padding:7px 10px;font-size:10px}
     grid-template-columns:1fr;
   }
 }
+
+
+/* --- Configuración: Neon PostgreSQL --- */
+.cloud-db-card{
+  display:grid;
+  gap:16px;
+  margin-bottom:18px;
+  padding:18px 20px;
+  border:1px solid var(--border);
+  border-radius:13px;
+  background:var(--panel);
+  box-shadow:0 4px 18px #13263d08;
+}
+.cloud-db-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:20px;
+}
+.cloud-db-head h3{
+  margin:5px 0 6px;
+  font-size:20px;
+}
+.cloud-db-head p{
+  max-width:780px;
+  margin:0;
+  color:var(--muted);
+  font-size:11px;
+  line-height:1.55;
+}
+.cloud-db-statuses{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+  gap:7px;
+}
+.cloud-db-pill{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:6px 9px;
+  border-radius:999px;
+  font-size:9px;
+  font-weight:850;
+  white-space:nowrap;
+}
+.cloud-db-pill.ok{
+  background:#ddf5e8;
+  color:#14764c;
+}
+.cloud-db-pill.warning{
+  background:#fff0cc;
+  color:#8b6400;
+}
+.cloud-db-pill.danger{
+  background:#ffe2e5;
+  color:#b42e3b;
+}
+.cloud-db-pill.neutral{
+  background:#edf1f5;
+  color:#5f7185;
+}
+.dark .cloud-db-pill.ok{background:#153b2b;color:#8ce0b6}
+.dark .cloud-db-pill.warning{background:#413617;color:#f2d06c}
+.dark .cloud-db-pill.danger{background:#48252b;color:#ffabb3}
+.dark .cloud-db-pill.neutral{background:#293440;color:#c4d0db}
+
+.cloud-db-alert{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+  padding:11px 12px;
+  border-radius:9px;
+  font-size:10px;
+}
+.cloud-db-alert.danger{
+  border:1px solid #dda3aa;
+  background:#fff0f2;
+  color:#9e303b;
+}
+.dark .cloud-db-alert.danger{
+  border-color:#6b3b42;
+  background:#3d2529;
+  color:#ffb4bc;
+}
+.cloud-db-alert span{
+  flex:1;
+  min-width:260px;
+}
+
+.cloud-db-comparison{
+  display:grid;
+  grid-template-columns:1fr 44px 1fr;
+  gap:12px;
+  align-items:center;
+}
+.cloud-db-side{
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:8px;
+  padding:13px;
+  border:1px solid var(--border);
+  border-radius:11px;
+  background:color-mix(in srgb,var(--panel) 96%,var(--bg) 4%);
+}
+.cloud-db-side-title{
+  grid-column:1/-1;
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:12px;
+  padding-bottom:8px;
+  border-bottom:1px solid var(--border);
+}
+.cloud-db-side-title span{
+  color:var(--muted);
+  font-size:9px;
+  text-transform:uppercase;
+  letter-spacing:.05em;
+}
+.cloud-db-side-title strong{
+  font-size:12px;
+}
+.cloud-db-arrow{
+  color:var(--blue);
+  font-size:24px;
+  font-weight:900;
+  text-align:center;
+}
+.cloud-db-metric{
+  display:flex;
+  flex-direction:column;
+  gap:3px;
+  padding:8px 9px;
+  border:1px solid var(--border);
+  border-radius:8px;
+  background:var(--panel);
+}
+.cloud-db-metric span{
+  color:var(--muted);
+  font-size:8px;
+}
+.cloud-db-metric strong{
+  font-size:12px;
+  font-variant-numeric:tabular-nums;
+}
+.cloud-db-metric strong.income{color:#10b981}
+.cloud-db-metric strong.expense{color:#ff4f5f}
+
+.cloud-db-meta{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:8px;
+}
+.cloud-db-meta span{
+  display:flex;
+  flex-direction:column;
+  gap:3px;
+  padding:9px 10px;
+  border:1px solid var(--border);
+  border-radius:8px;
+}
+.cloud-db-meta small{
+  color:var(--muted);
+  font-size:8px;
+}
+.cloud-db-meta strong{
+  overflow:hidden;
+  font-size:10px;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.cloud-db-verified{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:20px;
+  padding:13px 14px;
+  border:1px solid #8ed0ae;
+  border-radius:10px;
+  background:#edf9f3;
+  color:#176443;
+}
+.dark .cloud-db-verified{
+  border-color:#315f49;
+  background:#183329;
+  color:#94dfba;
+}
+.cloud-db-verified>div:first-child{
+  display:flex;
+  flex-direction:column;
+  gap:3px;
+}
+.cloud-db-verified span{
+  font-size:9px;
+}
+.cloud-db-checks{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+  gap:6px;
+}
+.cloud-db-checks span{
+  padding:5px 7px;
+  border-radius:999px;
+  background:#d7f1e4;
+  font-weight:800;
+}
+.dark .cloud-db-checks span{background:#214936}
+
+.cloud-db-actions{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+}
+.cloud-db-actions p{
+  flex:1;
+  min-width:300px;
+  margin:0;
+  color:var(--muted);
+  font-size:9px;
+  line-height:1.5;
+}
+
+@media(max-width:900px){
+  .cloud-db-head{
+    flex-direction:column;
+  }
+  .cloud-db-statuses{
+    justify-content:flex-start;
+  }
+  .cloud-db-comparison{
+    grid-template-columns:1fr;
+  }
+  .cloud-db-arrow{
+    transform:rotate(90deg);
+  }
+  .cloud-db-meta{
+    grid-template-columns:repeat(2,1fr);
+  }
+  .cloud-db-verified{
+    align-items:flex-start;
+    flex-direction:column;
+  }
+}
+@media(max-width:560px){
+  .cloud-db-side,
+  .cloud-db-meta{
+    grid-template-columns:1fr;
+  }
+  .cloud-db-side-title{
+    align-items:flex-start;
+    flex-direction:column;
+  }
+  .cloud-db-actions .primary,
+  .cloud-db-actions .secondary{
+    width:100%;
+  }
+}
