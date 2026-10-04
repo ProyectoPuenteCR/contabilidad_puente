@@ -2,8 +2,9 @@
 
 import Image from 'next/image';
 import { useEffect, useMemo, useState } from 'react';
-import { accounts, initialHours, initialMovements, initialSaldoSnapshot, initialInstitutions } from '../lib/seed';
+import { accounts, initialHours, initialMovements, initialSaldoSnapshot, initialInstitutions, initialInvestments } from '../lib/seed';
 import ExcelTools from './excel-tools';
+import InvestmentsPanel from './investments-panel';
 
 const money = new Intl.NumberFormat('es-AR', {
   style: 'currency',
@@ -190,6 +191,7 @@ export default function AccountingApp() {
   const [hours, setHours] = useState(initialHours);
   const [saldoSnapshot, setSaldoSnapshot] = useState(initialSaldoSnapshot);
   const [institutions, setInstitutions] = useState(initialInstitutions);
+  const [investments, setInvestments] = useState(initialInvestments);
   const [concepts, setConcepts] = useState([]);
   const [editingMovement, setEditingMovement] = useState(null);
   const [ready, setReady] = useState(false);
@@ -207,6 +209,7 @@ export default function AccountingApp() {
     const storedHours = loadStored('puente.hours', initialHours);
     const storedSaldoSnapshot = loadStored('puente.saldoSnapshot', null);
     const storedInstitutions = loadStored('puente.institutions', initialInstitutions);
+    const storedInvestments = loadStored('puente.investments', initialInvestments);
     const storedConcepts = loadStored('puente.concepts', null);
 
     const cleanMovements = isLegacyDemoMovements(storedMovements) ? [] : storedMovements;
@@ -229,6 +232,7 @@ export default function AccountingApp() {
     setHours(isLegacyDemoHours(storedHours) ? [] : storedHours);
     setSaldoSnapshot({ ...initialSaldoSnapshot, ...(storedSaldoSnapshot || {}) });
     setInstitutions([...(storedInstitutions || initialInstitutions), ...autoInstitutions]);
+    setInvestments(Array.isArray(storedInvestments) && storedInvestments.length ? storedInvestments : initialInvestments);
     setConcepts(Array.isArray(storedConcepts) && storedConcepts.length ? storedConcepts : initialConceptList);
     setDark(loadStored('puente.dark', false));
     setCompact(loadStored('puente.compact', false));
@@ -273,6 +277,11 @@ export default function AccountingApp() {
     if (!ready) return;
     saveStored('puente.institutions', institutions);
   }, [institutions, ready]);
+
+  useEffect(() => {
+    if (!ready) return;
+    saveStored('puente.investments', investments);
+  }, [investments, ready]);
 
   useEffect(() => {
     if (!ready) return;
@@ -538,6 +547,9 @@ export default function AccountingApp() {
     )));
     setMovements((prev) => prev.map((row) => (
       row.account === item.name ? { ...row, account: cleanName } : row
+    )));
+    setInvestments((prev) => prev.map((investment) => (
+      investment.bank === item.name ? { ...investment, bank: cleanName } : investment
     )));
 
     if (account === item.name) setAccount(cleanName);
@@ -859,23 +871,11 @@ export default function AccountingApp() {
               </Card>
             </div>
 
-            <div className="grid-3">
-              <Metric
-                label="Monto invertido"
-                value={money.format(saldoCalculated.investmentPrincipal || 0)}
-                tone="blue"
-              />
-              <Metric
-                label="Interés estimado"
-                value={money.format(saldoCalculated.investmentInterest || 0)}
-                tone="green"
-              />
-              <Metric
-                label="Monto a reembolsar"
-                value={money.format(saldoCalculated.investmentMaturity || 0)}
-                tone="amber"
-              />
-            </div>
+            <InvestmentsPanel
+              investments={investments}
+              accounts={availableAccounts}
+              onChange={setInvestments}
+            />
           </>
         )}
 
