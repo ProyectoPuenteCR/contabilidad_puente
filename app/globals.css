@@ -1449,3 +1449,211 @@ button.small{padding:7px 10px;font-size:10px}
     grid-template-columns:1fr;
   }
 }
+
+
+/* --- Estadísticas: selector de tipo de gráfico --- */
+.income-expense-chart-actions{
+  display:flex;
+  align-items:flex-end;
+  gap:16px;
+}
+.income-expense-chart-actions label{
+  display:grid;
+  gap:5px;
+  min-width:150px;
+  color:var(--muted);
+  font-size:9px;
+  font-weight:800;
+}
+.income-expense-chart-actions select{
+  min-height:36px;
+  padding:7px 10px;
+  border:1px solid var(--border);
+  border-radius:8px;
+  background:var(--panel);
+  color:var(--text);
+  outline:none;
+}
+.trend-dot{
+  width:18px!important;
+  height:0!important;
+  border-radius:0!important;
+  border-top:2px dashed #f2c14e;
+  background:transparent!important;
+}
+
+/* Líneas */
+.income-expense-line-wrap{
+  display:grid;
+  gap:10px;
+}
+.income-expense-line-chart{
+  width:100%;
+  min-height:300px;
+  display:block;
+  border:1px solid var(--border);
+  border-radius:10px;
+  background:color-mix(in srgb,var(--panel) 96%,var(--bg) 4%);
+}
+.line-grid{
+  stroke:color-mix(in srgb,var(--border) 72%,transparent);
+  stroke-width:1;
+}
+.line-zero{
+  stroke:color-mix(in srgb,var(--text) 34%,transparent);
+  stroke-width:1.2;
+}
+.series-line{
+  fill:none;
+  stroke-width:4;
+  stroke-linejoin:round;
+  stroke-linecap:round;
+}
+.income-series{stroke:#10b981}
+.expense-series{stroke:#ff4f5f}
+.trend-series{
+  stroke:#f2c14e;
+  stroke-width:3;
+  stroke-dasharray:10 8;
+}
+.line-point{
+  stroke:var(--panel);
+  stroke-width:3;
+}
+.income-point{fill:#10b981}
+.expense-point{fill:#ff4f5f}
+.line-axis-label{
+  fill:var(--muted);
+  font-size:15px;
+  font-weight:700;
+}
+.trend-explanation{
+  display:flex;
+  align-items:flex-start;
+  gap:8px;
+  padding:10px 12px;
+  border:1px solid var(--border);
+  border-radius:9px;
+  background:color-mix(in srgb,var(--panel) 94%,#f2c14e 6%);
+  color:var(--muted);
+  font-size:10px;
+  line-height:1.5;
+}
+.trend-explanation strong{
+  color:var(--text);
+  white-space:nowrap;
+}
+
+/* Torta / Dona */
+.income-expense-pie-layout{
+  min-height:320px;
+  display:grid;
+  grid-template-columns:minmax(260px,380px) minmax(280px,1fr);
+  gap:30px;
+  align-items:center;
+  justify-content:center;
+  padding:22px;
+  border:1px solid var(--border);
+  border-radius:10px;
+  background:color-mix(in srgb,var(--panel) 96%,var(--bg) 4%);
+}
+.income-expense-pie{
+  position:relative;
+  width:min(320px,70vw);
+  aspect-ratio:1;
+  justify-self:center;
+  border-radius:50%;
+  box-shadow:inset 0 0 0 1px #ffffff18,0 8px 28px #0001;
+}
+.income-expense-pie.donut::after{
+  content:'';
+  position:absolute;
+  inset:26%;
+  border-radius:50%;
+  background:var(--panel);
+  box-shadow:0 0 0 1px var(--border);
+}
+.donut-center{
+  position:absolute;
+  inset:31%;
+  z-index:2;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+}
+.donut-center small{
+  color:var(--muted);
+  font-size:9px;
+}
+.donut-center strong{
+  margin-top:5px;
+  font-size:13px;
+}
+.income-expense-pie-summary{
+  display:grid;
+  gap:11px;
+}
+.income-expense-pie-summary h4{
+  margin:0;
+  font-size:15px;
+}
+.income-expense-pie-summary>p{
+  margin:0 0 4px;
+  color:var(--muted);
+  font-size:10px;
+  line-height:1.5;
+}
+.income-expense-pie-summary>div{
+  display:grid;
+  grid-template-columns:1fr auto auto;
+  gap:12px;
+  align-items:center;
+  padding:11px 12px;
+  border:1px solid var(--border);
+  border-radius:9px;
+  background:var(--panel);
+}
+.income-expense-pie-summary span{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  font-size:11px;
+}
+.income-expense-pie-summary span i{
+  width:10px;
+  height:10px;
+  border-radius:3px;
+}
+.income-expense-pie-summary strong{
+  font-size:13px;
+}
+.income-expense-pie-summary small{
+  color:var(--muted);
+  font-size:10px;
+  text-align:right;
+}
+
+@media(max-width:900px){
+  .income-expense-chart-actions{
+    width:100%;
+    align-items:stretch;
+    flex-direction:column;
+  }
+  .income-expense-chart-actions label{width:100%}
+  .income-expense-pie-layout{
+    grid-template-columns:1fr;
+  }
+}
+@media(max-width:680px){
+  .trend-explanation{
+    flex-direction:column;
+  }
+  .income-expense-line-chart{
+    min-width:720px;
+  }
+  .income-expense-line-wrap{
+    overflow-x:auto;
+  }
+}
