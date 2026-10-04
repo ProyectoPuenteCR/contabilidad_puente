@@ -2802,3 +2802,82 @@ button.small{padding:7px 10px;font-size:10px}
     width:100%;
   }
 }
+
+
+/* --- Horas: múltiples servicios por especialista --- */
+.specialist-services-summary{
+  display:flex;
+  flex-wrap:wrap;
+  gap:5px;
+  align-items:center;
+}
+.service-chip{
+  display:inline-flex;
+  align-items:center;
+  padding:4px 7px;
+  border:1px solid var(--border);
+  border-radius:999px;
+  background:color-mix(in srgb,var(--panel) 88%,var(--blue) 12%);
+  color:var(--text);
+  font-size:8px;
+  font-weight:800;
+  white-space:nowrap;
+}
+.service-chip.more{
+  background:var(--bg);
+  color:var(--muted);
+}
+.config-muted{
+  color:var(--muted);
+  font-size:9px;
+}
+.specialist-services-editor-row td{
+  padding:0!important;
+  background:color-mix(in srgb,var(--panel) 96%,var(--blue) 4%);
+}
+.specialist-services-editor{
+  display:grid;
+  gap:10px;
+  padding:13px 14px;
+  border-top:1px solid var(--border);
+  border-bottom:1px solid var(--border);
+}
+.specialist-services-editor>div:first-child{
+  display:flex;
+  flex-direction:column;
+  gap:3px;
+}
+.specialist-services-editor strong{
+  font-size:10px;
+}
+.specialist-services-editor span{
+  color:var(--muted);
+  font-size:9px;
+}
+.specialist-services-checks{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(210px,1fr));
+  gap:7px;
+}
+.specialist-services-checks label{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-height:36px;
+  padding:7px 9px;
+  border:1px solid var(--border);
+  border-radius:8px;
+  background:var(--panel);
+  cursor:pointer;
+}
+.specialist-services-checks label:hover{
+  border-color:color-mix(in srgb,var(--blue) 55%,var(--border));
+}
+.specialist-services-checks input{
+  flex:0 0 auto;
+}
+.specialist-services-checks label span{
+  color:var(--text);
+  font-size:9px;
+  font-weight:750;
+}
