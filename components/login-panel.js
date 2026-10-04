@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useState } from 'react';
 import { signIn } from 'next-auth/react';
 
@@ -65,104 +66,165 @@ export default function LoginPanel({
   }
 
   return (
-    <main className="login-shell">
-      <section className="login-card">
-        <div className="login-brand">
-          <div className="login-brand-mark">P</div>
-          <div>
-            <strong>Proyecto Puente</strong>
-            <span>Contabilidad</span>
-          </div>
+    <main className="pp-login-shell">
+      <section className="pp-login-story">
+        <div className="pp-login-logo-card">
+          <Image
+            src="/logo-proyecto-puente.webp"
+            alt="Proyecto Puente"
+            width={420}
+            height={273}
+            className="pp-login-logo"
+            priority
+          />
         </div>
 
-        <div className="login-copy">
-          <span className="login-kicker">Acceso seguro</span>
-          <h1>Ingresar al sistema</h1>
+        <div className="pp-login-story-copy">
+          <span className="pp-login-eyebrow">
+            CONTABILIDAD · PROYECTO PUENTE
+          </span>
+
+          <h1>
+            Cada movimiento,
+            <span> una decisión mejor.</span>
+          </h1>
+
           <p>
-            Utilizá una cuenta de Google autorizada. La contraseña
-            permanece siempre en Google y no es almacenada por
-            Proyecto Puente.
+            Centralizamos movimientos, saldos, gastos y horas para que
+            la gestión financiera del proyecto sea clara, segura y
+            trazable.
           </p>
-        </div>
 
-        {!authConfigured && (
-          <div className="setup-warning">
-            <strong>Autenticación pendiente de configuración</strong>
-            <span>
-              Falta cargar AUTH_SECRET, AUTH_GOOGLE_ID y
-              AUTH_GOOGLE_SECRET en Vercel.
-            </span>
+          <div className="pp-login-feature-list">
+            <div><span>▤</span> Libro de contabilidad centralizado</div>
+            <div><span>◈</span> Saldos e indicadores financieros</div>
+            <div><span>▣</span> Gastos por año y concepto</div>
+            <div><span>◷</span> Registro de horas del equipo</div>
           </div>
-        )}
-
-        {error && <div className="login-error">{error}</div>}
-
-        <button
-          type="button"
-          className="google-button"
-          onClick={googleLogin}
-          disabled={loading || !authConfigured}
-        >
-          <span className="google-g">G</span>
-          Continuar con Google
-        </button>
-
-        <div className="login-divider">
-          <span>acceso alternativo</span>
         </div>
 
-        {!showEmergency ? (
+        <div className="pp-login-story-footer">
+          <strong>PROYECTO PUENTE</strong>
+          <span>Conectamos personas con oportunidades.</span>
+        </div>
+
+        <div className="pp-login-rings pp-login-ring-1" />
+        <div className="pp-login-rings pp-login-ring-2" />
+        <div className="pp-login-rings pp-login-ring-3" />
+      </section>
+
+      <section className="pp-login-access">
+        <div className="pp-login-mobile-logo">
+          <Image
+            src="/logo-proyecto-puente.webp"
+            alt="Proyecto Puente"
+            width={420}
+            height={273}
+            priority
+          />
+        </div>
+
+        <div className="pp-login-access-card">
+          <div className="pp-login-security-icon" aria-hidden="true">
+            <span>✓</span>
+          </div>
+
+          <span className="pp-login-welcome">BIENVENIDO AL EQUIPO</span>
+
+          <h2>
+            Tu trabajo hace
+            <br />
+            la diferencia<span>.</span>
+          </h2>
+
+          <p className="pp-login-access-copy">
+            Ingresá para administrar la contabilidad de Proyecto Puente.
+          </p>
+
+          {!authConfigured && (
+            <div className="setup-warning">
+              <strong>Autenticación pendiente de configuración</strong>
+              <span>
+                Falta cargar AUTH_SECRET, AUTH_GOOGLE_ID y
+                AUTH_GOOGLE_SECRET en Vercel.
+              </span>
+            </div>
+          )}
+
+          {error && <div className="login-error">{error}</div>}
+
           <button
             type="button"
-            className="emergency-link"
-            onClick={() => setShowEmergency(true)}
+            className="pp-google-button"
+            onClick={googleLogin}
+            disabled={loading || !authConfigured}
           >
-            Usar código de emergencia
+            <span className="pp-google-g">G</span>
+            <span>
+              {loading && !showEmergency
+                ? 'Conectando con Google…'
+                : 'Continuar con Google'}
+            </span>
+            <span className="pp-google-arrow">→</span>
           </button>
-        ) : (
-          <form
-            className="emergency-form"
-            onSubmit={emergencyLogin}
+
+          <div className="pp-authorized-note">
+            <span>✓</span>
+            Solo cuentas autorizadas de Proyecto Puente.
+          </div>
+
+          <button
+            type="button"
+            className="pp-emergency-trigger"
+            onClick={() => {
+              setError('');
+              setShowEmergency((value) => !value);
+            }}
           >
-            <label>
-              Código de emergencia
-              <input
-                type="password"
-                autoComplete="one-time-code"
-                placeholder="PP-XXXX-XXXX-..."
-                value={code}
-                onChange={(event) =>
-                  setCode(event.target.value)
-                }
-                required
-              />
-            </label>
+            {showEmergency
+              ? 'Ocultar acceso de emergencia'
+              : 'Usar código de emergencia'}
+            <span>→</span>
+          </button>
 
-            <button
-              className="primary"
-              disabled={loading || !code.trim()}
+          {showEmergency && (
+            <form
+              className="pp-emergency-form"
+              onSubmit={emergencyLogin}
             >
-              {loading ? 'Validando…' : 'Ingresar con código'}
-            </button>
+              <label>
+                Código de emergencia
+                <input
+                  type="password"
+                  autoComplete="one-time-code"
+                  placeholder="PP-XXXX-XXXX-..."
+                  value={code}
+                  onChange={(event) =>
+                    setCode(event.target.value)
+                  }
+                  required
+                />
+              </label>
 
-            <button
-              type="button"
-              className="text-button"
-              onClick={() => {
-                setShowEmergency(false);
-                setCode('');
-              }}
-            >
-              Volver
-            </button>
-          </form>
-        )}
+              <button
+                className="primary"
+                disabled={loading || !code.trim()}
+              >
+                {loading ? 'Validando…' : 'Ingresar con código'}
+              </button>
 
-        <p className="login-security-note">
-          El código de emergencia está reservado para recuperación
-          administrativa y los códigos generados desde el sistema son
-          de un solo uso.
-        </p>
+              <small>
+                Uso reservado para recuperación administrativa.
+                Los códigos generados desde el sistema son de un solo uso.
+              </small>
+            </form>
+          )}
+
+          <div className="pp-login-access-footer">
+            <span>Acceso protegido con Google OAuth</span>
+            <b>Contabilidad Puente</b>
+          </div>
+        </div>
       </section>
     </main>
   );
