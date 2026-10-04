@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { accounts, initialHours, initialMovements, initialReceivables } from '../lib/seed';
+import ExcelTools from './excel-tools';
 
 const money = new Intl.NumberFormat('es-AR', {
   style: 'currency',
@@ -25,6 +26,18 @@ function loadStored(key, fallback) {
   } catch {
     return fallback;
   }
+}
+
+function isLegacyDemoMovements(rows) {
+  return Array.isArray(rows) && rows.length > 0 && rows.every(
+    (row) => String(row?.notes || '').toLowerCase().includes('dato demostrativo')
+  );
+}
+
+function isLegacyDemoHours(rows) {
+  return Array.isArray(rows) && rows.length > 0 && rows.every(
+    (row) => String(row?.notes || '').toLowerCase().includes('jornada demostrativa')
+  );
 }
 
 const nav = [
@@ -53,8 +66,10 @@ export default function AccountingApp() {
   const [dark, setDark] = useState(false);
 
   useEffect(() => {
-    setMovements(loadStored('puente.movements', initialMovements));
-    setHours(loadStored('puente.hours', initialHours));
+    const storedMovements = loadStored('puente.movements', initialMovements);
+    const storedHours = loadStored('puente.hours', initialHours);
+    setMovements(isLegacyDemoMovements(storedMovements) ? [] : storedMovements);
+    setHours(isLegacyDemoHours(storedHours) ? [] : storedHours);
     setDark(loadStored('puente.dark', false));
     setReady(true);
   }, []);
@@ -79,6 +94,11 @@ export default function AccountingApp() {
     const expense = movements.reduce((s, x) => s + Number(x.expense || 0), 0);
     return { income, expense, balance: income - expense };
   }, [movements]);
+
+  const availableAccounts = useMemo(() => (
+    [...new Set([...accounts, ...movements.map((m) => m.account).filter(Boolean)])]
+      .sort((a, b) => a.localeCompare(b))
+  ), [movements]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -160,8 +180,9 @@ export default function AccountingApp() {
         {section === 'book' && (
           <>
             <Header title="Libro de contabilidad" subtitle="Resumen y administración de todos los movimientos del proyecto." action="Nuevo movimiento" onAction={() => setModal('movement')} />
-            <Kpis totals={totals} />
-            <Filters query={query} setQuery={setQuery} account={account} setAccount={setAccount} />
+            <Kpis totals={totals} count={movements.length} />
+            <ExcelTools movements={movements} onImport={setMovements} />
+            <Filters query={query} setQuery={setQuery} account={account} setAccount={setAccount} options={availableAccounts} />
             <Card>
               <div className="table-wrap">
                 <table>
@@ -233,7 +254,7 @@ export default function AccountingApp() {
                 </div>
               </Card>
             </div>
-            <Filters query={query} setQuery={setQuery} account={account} setAccount={setAccount} />
+            <Filters query={query} setQuery={setQuery} account={account} setAccount={setAccount} options={availableAccounts} />
             <Card>
               <div className="table-wrap"><table><thead><tr><th>Fecha</th><th>Cuenta</th><th>Concepto</th><th>Detalle</th><th>Factura</th><th>Monto</th><th></th></tr></thead>
               <tbody>{expenses.map(m=><tr key={m.id}><td>{formatDate(m.date)}</td><td>{m.account}</td><td>{m.concept}</td><td>{m.detail}</td><td>{m.invoice||'-'}</td><td className="expense">{money.format(m.expense)}</td><td><button className="icon-btn danger" onClick={()=>removeMovement(m.id)}>×</button></td></tr>)}</tbody></table></div>
@@ -266,17 +287,17 @@ function Header({title,subtitle,action,onAction}) {
   return <header className="page-head"><div><h1>{title}</h1><p>{subtitle}</p></div>{action && <button className="primary" onClick={onAction}>＋ {action}</button>}</header>;
 }
 
-function Kpis({totals}) {
-  return <div className="grid-3"><Metric label="Ingresos totales" value={money.format(totals.income)} tone="green"/><Metric label="Gastos totales" value={money.format(totals.expense)} tone="red"/><Metric label="Saldo actual" value={money.format(totals.balance)} tone="blue"/></div>;
+function Kpis({totals,count}) {
+  return <div className="grid-4"><Metric label="Ingresos totales" value={money.format(totals.income)} tone="green"/><Metric label="Gastos totales" value={money.format(totals.expense)} tone="red"/><Metric label="Saldo actual" value={money.format(totals.balance)} tone="blue"/><Metric label="Movimientos" value={count.toLocaleString('es-AR')} tone="amber"/></div>;
 }
 
 function Metric({label,value,tone}) {
   return <div className="metric"><span className={'metric-icon '+tone}>{tone==='green'?'↗':tone==='red'?'↘':tone==='amber'?'◇':'▣'}</span><div><small>{label}</small><strong>{value}</strong></div></div>;
 }
 
-function Filters({query,setQuery,account,setAccount}) {
+function Filters({query,setQuery,account,setAccount,options=accounts}) {
   return <div className="filters">
-    <select value={account} onChange={e=>setAccount(e.target.value)}><option value="TODAS">Todas las cuentas</option>{accounts.map(a=><option key={a}>{a}</option>)}</select>
+    <select value={account} onChange={e=>setAccount(e.target.value)}><option value="TODAS">Todas las cuentas</option>{options.map(a=><option key={a}>{a}</option>)}</select>
     <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar concepto, detalle, operación..." />
   </div>;
 }
