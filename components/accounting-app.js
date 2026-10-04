@@ -82,6 +82,16 @@ function movementYear(movement) {
   return match ? match[1] : '';
 }
 
+function latestMovementYear(rows) {
+  const years = [...new Set(
+    (Array.isArray(rows) ? rows : [])
+      .map(movementYear)
+      .filter(Boolean)
+  )].sort((a, b) => Number(b) - Number(a));
+
+  return years[0] || 'TODOS';
+}
+
 function summarize(rows) {
   return rows.reduce(
     (acc, row) => {
@@ -267,6 +277,7 @@ export default function AccountingApp({ user = null }) {
     setInvestments(Array.isArray(storedInvestments) && storedInvestments.length ? storedInvestments : initialInvestments);
     setConcepts(Array.isArray(storedConcepts) && storedConcepts.length ? storedConcepts : initialConceptList);
     setAuditLog(Array.isArray(storedAuditLog) ? storedAuditLog : []);
+    setYear(latestMovementYear(cleanMovements));
     setDark(loadStored('puente.dark', false));
     setCompact(loadStored('puente.compact', false));
     setColumnWidths({
@@ -320,7 +331,9 @@ export default function AccountingApp({ user = null }) {
 
         cloudSkipNextSyncRef.current = true;
 
-        setMovements(Array.isArray(payload.movements) ? payload.movements : []);
+        const cloudMovements = Array.isArray(payload.movements) ? payload.movements : [];
+        setMovements(cloudMovements);
+        setYear(latestMovementYear(cloudMovements));
         setHours(Array.isArray(payload.hours) ? payload.hours : []);
         setSaldoSnapshot({
           ...initialSaldoSnapshot,
@@ -1069,7 +1082,7 @@ export default function AccountingApp({ user = null }) {
   function openStatistics(accountName = 'TODAS') {
     setAccount(accountName || 'TODAS');
     setConcept('TODOS');
-    setYear('TODOS');
+    setYear(latestMovementYear(movements));
     setQuery('');
     setSection('statistics');
   }
@@ -1220,7 +1233,7 @@ export default function AccountingApp({ user = null }) {
 
     setAccount('TODAS');
     setConcept('TODOS');
-    setYear('TODOS');
+    setYear(latestMovementYear(imported));
     setQuery('');
   }
 
@@ -1302,7 +1315,9 @@ export default function AccountingApp({ user = null }) {
       cloudSkipNextSyncRef.current = true;
       cloudPendingRef.current = null;
 
-      setMovements(Array.isArray(payload.movements) ? payload.movements : []);
+      const reloadedMovements = Array.isArray(payload.movements) ? payload.movements : [];
+      setMovements(reloadedMovements);
+      setYear(latestMovementYear(reloadedMovements));
       setHours(Array.isArray(payload.hours) ? payload.hours : []);
       setSaldoSnapshot({
         ...initialSaldoSnapshot,
@@ -1395,6 +1410,14 @@ export default function AccountingApp({ user = null }) {
     }
   }
 
+  function changeSection(nextSection) {
+    if (['book', 'statistics', 'expenses'].includes(nextSection)) {
+      setYear(latestMovementYear(movements));
+    }
+
+    setSection(nextSection);
+  }
+
   function selectExpenseConcept(name) {
     const next = expenseConceptFilter === name ? '' : name;
     setExpenseConceptFilter(next);
@@ -1436,7 +1459,7 @@ export default function AccountingApp({ user = null }) {
             <button
               key={id}
               className={section === id ? 'active' : ''}
-              onClick={() => setSection(id)}
+              onClick={() => changeSection(id)}
             >
               <span className="nav-icon">{icons[id]}</span>{label}
             </button>
