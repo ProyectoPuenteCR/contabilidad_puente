@@ -726,3 +726,29 @@ button.small{padding:7px 10px;font-size:10px}
   .usage-module-list{width:100%}
   .historical-summary-grid{grid-template-columns:1fr}
 }
+
+
+/* Ajustes de almacenamiento y menú admin */
+.sidebar-auth-actions{
+  grid-template-columns:repeat(auto-fit,minmax(62px,1fr))!important;
+}
+.usage-local-storage-card{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:24px;
+  padding:14px 16px;
+  border:1px solid #dce5ee;
+  border-radius:12px;
+  background:#fff;
+}
+.usage-local-storage-card h3{margin:0 0 5px;color:#142c47;font-size:14px}
+.usage-local-storage-card p{max-width:760px;margin:0;color:#71859a;font-size:9px;line-height:1.55}
+.usage-local-storage-values{display:flex;gap:22px;flex-wrap:wrap;justify-content:flex-end}
+.usage-local-storage-values span{display:flex;flex-direction:column;min-width:120px}
+.usage-local-storage-values small{color:#74889e;font-size:8px}
+.usage-local-storage-values strong{margin-top:3px;color:#17304c;font-size:13px}
+@media(max-width:900px){
+  .usage-local-storage-card{align-items:flex-start;flex-direction:column}
+  .usage-local-storage-values{justify-content:flex-start}
+}
