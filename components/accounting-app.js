@@ -1145,6 +1145,27 @@ export default function AccountingApp() {
           </>
         )}
 
+        {section === 'settings' && (
+          <>
+            <Header
+              title="Configuración"
+              subtitle="Administración de cuentas y conceptos utilizados en toda la aplicación."
+            />
+
+            <ConfigurationPanel
+              institutions={institutions}
+              concepts={concepts}
+              movements={movements}
+              onAddInstitution={addInstitution}
+              onRenameInstitution={renameInstitution}
+              onDeleteInstitution={deleteInstitution}
+              onAddConcept={addConcept}
+              onRenameConcept={renameConcept}
+              onDeleteConcept={deleteConcept}
+            />
+          </>
+        )}
+
         {section === 'hours' && (
           <>
             <Header
@@ -1198,11 +1219,12 @@ export default function AccountingApp() {
       {modal && (
         <Modal
           type={modal}
-          onClose={() => setModal(null)}
+          onClose={closeModal}
           onMovement={saveMovement}
           onHours={saveHours}
           conceptOptions={availableConcepts}
           accountOptions={availableAccounts}
+          initialMovement={editingMovement}
         />
       )}
     </div>
