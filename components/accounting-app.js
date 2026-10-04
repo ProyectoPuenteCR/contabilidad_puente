@@ -461,37 +461,84 @@ export default function AccountingApp({ user = null }) {
       .sort((a, b) => Number(b.year) - Number(a.year));
   }, [filteredWithoutYear]);
 
-  const incomeExpenseComparison = useMemo(() => {
-    if (year === 'TODOS') {
-      return yearlyStats
-        .slice()
-        .sort((a, b) => Number(a.year) - Number(b.year))
-        .map((item) => ({
-          key: item.year,
-          label: item.year,
-          income: Number(item.income || 0),
-          expense: Number(item.expense || 0),
-        }));
-    }
-
+  const conceptTimelineData = useMemo(() => {
+    const sourceRows = year === 'TODOS' ? filteredWithoutYear : filtered;
     const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-    const monthMap = Array.from({ length: 12 }, (_, index) => ({
-      key: `${year}-${String(index + 1).padStart(2, '0')}`,
-      label: monthNames[index],
-      income: 0,
-      expense: 0,
-    }));
 
-    for (const row of filtered) {
-      const monthIndex = Number(String(row.date || '').slice(5, 7)) - 1;
-      if (monthIndex < 0 || monthIndex > 11) continue;
-
-      monthMap[monthIndex].income += Number(row.income || 0);
-      monthMap[monthIndex].expense += Number(row.expense || 0);
+    const validRows = sourceRows.filter((row) => /^\d{4}-\d{2}/.test(String(row.date || '')));
+    if (!validRows.length) {
+      return { periods: [], concepts: [] };
     }
 
-    return monthMap;
-  }, [year, yearlyStats, filtered]);
+    const sortedKeys = validRows
+      .map((row) => String(row.date).slice(0, 7))
+      .sort();
+
+    const firstKey = year === 'TODOS' ? sortedKeys[0] : `${year}-01`;
+    const lastKey = year === 'TODOS' ? sortedKeys[sortedKeys.length - 1] : `${year}-12`;
+
+    const [firstYear, firstMonth] = firstKey.split('-').map(Number);
+    const [lastYear, lastMonth] = lastKey.split('-').map(Number);
+
+    const periods = [];
+    let cursorYear = firstYear;
+    let cursorMonth = firstMonth;
+
+    while (
+      cursorYear < lastYear ||
+      (cursorYear === lastYear && cursorMonth <= lastMonth)
+    ) {
+      const key = `${cursorYear}-${String(cursorMonth).padStart(2, '0')}`;
+      periods.push({
+        key,
+        label: year === 'TODOS'
+          ? `${monthNames[cursorMonth - 1]} ${String(cursorYear).slice(-2)}`
+          : monthNames[cursorMonth - 1],
+        fullLabel: `${monthNames[cursorMonth - 1]} ${cursorYear}`,
+        income: 0,
+        expense: 0,
+        result: 0,
+        concepts: {},
+      });
+
+      cursorMonth += 1;
+      if (cursorMonth > 12) {
+        cursorMonth = 1;
+        cursorYear += 1;
+      }
+    }
+
+    const byKey = new Map(periods.map((period) => [period.key, period]));
+    const conceptTotals = new Map();
+
+    for (const row of validRows) {
+      const key = String(row.date).slice(0, 7);
+      const period = byKey.get(key);
+      if (!period) continue;
+
+      const conceptName = String(row.concept || 'Sin concepto').trim() || 'Sin concepto';
+      const income = Number(row.income || 0);
+      const expense = Number(row.expense || 0);
+      const net = income - expense;
+
+      period.income += income;
+      period.expense += expense;
+      period.result += net;
+      period.concepts[conceptName] = Number(period.concepts[conceptName] || 0) + net;
+
+      const current = conceptTotals.get(conceptName) || { name: conceptName, income: 0, expense: 0, net: 0, magnitude: 0 };
+      current.income += income;
+      current.expense += expense;
+      current.net += net;
+      current.magnitude += Math.abs(income) + Math.abs(expense);
+      conceptTotals.set(conceptName, current);
+    }
+
+    const concepts = [...conceptTotals.values()]
+      .sort((a, b) => b.magnitude - a.magnitude);
+
+    return { periods, concepts };
+  }, [year, filteredWithoutYear, filtered]);
 
   const monthlyIncomeByAccount = useMemo(() => {
     if (year === 'TODOS') {
@@ -1311,10 +1358,10 @@ export default function AccountingApp({ user = null }) {
               </div>
             )}
 
-            <Card title={year === 'TODOS' ? 'Ingresos vs egresos · comparativa anual' : `Ingresos vs egresos · ${year}`}>
-              <IncomeExpenseChart
-                data={incomeExpenseComparison}
-                periodLabel={year === 'TODOS' ? 'Año' : 'Mes'}
+            <Card title={year === 'TODOS' ? 'Evolución mensual por concepto · todos los años' : `Evolución mensual por concepto · ${year}`}>
+              <ConceptTimelineChart
+                data={conceptTimelineData}
+                allYears={year === 'TODOS'}
               />
             </Card>
 
