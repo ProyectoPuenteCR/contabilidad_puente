@@ -348,7 +348,7 @@ export default function AccountingApp() {
               onAction={() => setModal('movement')}
             />
 
-            <div className="grid-4">
+            <div className="grid-4 book-main-metrics">
               <Metric
                 label={year === 'TODOS' ? 'Ingresos · todos los años' : `Ingresos · ${year}`}
                 value={money.format(filteredTotals.income)}
@@ -360,17 +360,54 @@ export default function AccountingApp() {
                 tone="red"
               />
               <Metric
-                label="Saldo actual bruto"
+                label="Saldo actual bruto total"
                 value={currentBalanceLabel}
                 tone="blue"
-                hint={saldoSnapshot ? 'Tomado de la hoja Saldo' : 'Reimporte el Excel original'}
+                hint={saldoSnapshot ? 'Incluye inversiones · hoja Saldo' : 'Reimporte el Excel original'}
               />
               <Metric
-                label="Movimientos visibles"
-                value={number.format(filtered.length)}
-                tone="amber"
+                label="Dinero disponible"
+                value={saldoSnapshot ? money.format(saldoSnapshot.available || 0) : 'Reimportar Excel'}
+                tone="green"
+                hint={saldoSnapshot ? 'Disponibilidad informada en la hoja Saldo' : 'Falta importar la hoja Saldo'}
               />
             </div>
+
+            {saldoSnapshot ? (
+              <section className="book-balance-labels" aria-label="Resumen financiero actual">
+                <div className="finance-label finance-label-wide">
+                  <span>Saldo bruto + eCheq a cobrar</span>
+                  <strong>{money.format(saldoSnapshot.grossPlusReceivables || 0)}</strong>
+                </div>
+
+                <div className="finance-label">
+                  <span>Futuros cobros</span>
+                  <strong>{money.format(saldoSnapshot.futureReceivables || 0)}</strong>
+                </div>
+
+                <div className="finance-label">
+                  <span>Certificación a registrar (45 D)</span>
+                  <strong>{money.format(saldoSnapshot.certification45 || 0)}</strong>
+                </div>
+
+                <div className="bank-labels">
+                  {(saldoSnapshot.banks || []).map((bank) => (
+                    <div
+                      className={`bank-label bank-${String(bank.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+                      key={bank.name}
+                    >
+                      <span>{bank.name}</span>
+                      <strong>{money.format(bank.value || 0)}</strong>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : (
+              <div className="data-warning book-saldo-warning">
+                Reimporte el Excel original para mostrar aquí el <strong>Saldo actual</strong>,
+                <strong> Dinero disponible</strong> y los saldos por banco.
+              </div>
+            )}
 
             <ExcelTools
               movements={movements}
