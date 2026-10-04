@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { accounts, initialHours, initialMovements, initialSaldoSnapshot, initialInstitutions, initialInvestments } from '../lib/seed';
 import ExcelTools from './excel-tools';
 import InvestmentsPanel from './investments-panel';
+import AuthToolbar from './auth-toolbar';
 
 const money = new Intl.NumberFormat('es-AR', {
   style: 'currency',
@@ -185,7 +186,7 @@ const icons = {
   settings: '⚙',
 };
 
-export default function AccountingApp() {
+export default function AccountingApp({ user = null }) {
   const [section, setSection] = useState('book');
   const [movements, setMovements] = useState(initialMovements);
   const [hours, setHours] = useState(initialHours);
@@ -716,6 +717,8 @@ export default function AccountingApp() {
         </nav>
 
         <div className="sidebar-bottom">
+          {user && <AuthToolbar user={user} />}
+
           <button onClick={() => setDark((value) => !value)}>
             {dark ? '☀' : '◐'} {dark ? 'Tema claro' : 'Tema oscuro'}
           </button>
