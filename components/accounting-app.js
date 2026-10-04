@@ -1972,24 +1972,69 @@ function AuditLogCard({ auditLog }) {
 function HistoricalConceptModal({ edit, conceptOptions, onClose, onSave }) {
   const [newConcept, setNewConcept] = useState(edit.newConcept || edit.oldConcept || '');
   const [reason, setReason] = useState('');
+  const [rows, setRows] = useState(
+    (edit.rows || []).map((row) => ({
+      ...row,
+      income: String(Number(row.income || 0)),
+      expense: String(Number(row.expense || 0)),
+    }))
+  );
 
   const historicalYears = (edit.years || []).join(', ') || '-';
   const currentYear = String(new Date().getFullYear());
   const isOldExercise = (edit.years || []).some((item) => String(item) < currentYear);
 
+  const editedTotals = useMemo(() => {
+    const income = rows.reduce((sum, row) => sum + Math.max(0, Number(row.income || 0)), 0);
+    const expense = rows.reduce((sum, row) => sum + Math.max(0, Number(row.expense || 0)), 0);
+    return {
+      income,
+      expense,
+      result: income - expense,
+    };
+  }, [rows]);
+
+  const changedValueCount = useMemo(() => {
+    const original = new Map((edit.rows || []).map((row) => [row.id, row]));
+
+    return rows.filter((row) => {
+      const before = original.get(row.id);
+      if (!before) return false;
+
+      return (
+        Math.abs(Number(before.income || 0) - Number(row.income || 0)) > 0.0001 ||
+        Math.abs(Number(before.expense || 0) - Number(row.expense || 0)) > 0.0001
+      );
+    }).length;
+  }, [rows, edit.rows]);
+
+  function updateRow(id, key, value) {
+    setRows((current) => current.map((row) => (
+      row.id === id ? { ...row, [key]: value } : row
+    )));
+  }
+
   function submit(event) {
     event.preventDefault();
 
-    if (!String(newConcept || '').trim() || !String(reason || '').trim()) {
+    if (!String(newConcept || '').trim() || String(reason || '').trim().length < 5) {
       return;
     }
 
-    onSave({ newConcept, reason });
+    onSave({
+      newConcept,
+      reason,
+      rows: rows.map((row) => ({
+        ...row,
+        income: Math.max(0, Number(row.income || 0)),
+        expense: Math.max(0, Number(row.expense || 0)),
+      })),
+    });
   }
 
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
-      <div className="modal historical-edit-modal" onMouseDown={(event) => event.stopPropagation()}>
+      <div className="modal historical-edit-modal historical-edit-modal-wide" onMouseDown={(event) => event.stopPropagation()}>
         <div className="modal-head">
           <div>
             <span className={isOldExercise ? 'historical-badge warning' : 'historical-badge'}>
@@ -1997,8 +2042,8 @@ function HistoricalConceptModal({ edit, conceptOptions, onClose, onSave }) {
             </span>
             <h2>Editar resumen por concepto</h2>
             <p>
-              Esta fila es un cálculo agrupado. Se modificará únicamente la clasificación
-              de los {number.format(edit.affectedCount || 0)} movimientos incluidos por los filtros actuales.
+              Podés corregir el concepto y también los importes de Entrada / Salida de cada
+              movimiento que forma este resumen. Todo cambio requiere motivo y queda auditado.
             </p>
           </div>
           <button className="icon-btn" type="button" onClick={onClose}>×</button>
@@ -2008,25 +2053,99 @@ function HistoricalConceptModal({ edit, conceptOptions, onClose, onSave }) {
           <div className="historical-summary-grid">
             <div><small>Ejercicio(s)</small><strong>{historicalYears}</strong></div>
             <div><small>Cuenta</small><strong>{edit.account || 'Todas'}</strong></div>
-            <div><small>Ingresos actuales</small><strong className="income">{money.format(edit.income || 0)}</strong></div>
-            <div><small>Gastos actuales</small><strong className="expense">{money.format(edit.expense || 0)}</strong></div>
+            <div>
+              <small>Ingresos</small>
+              <strong className="income">{money.format(editedTotals.income)}</strong>
+              {Math.abs(editedTotals.income - Number(edit.income || 0)) > 0.0001 && (
+                <span className="historical-delta">Antes {money.format(edit.income || 0)}</span>
+              )}
+            </div>
+            <div>
+              <small>Gastos</small>
+              <strong className="expense">{money.format(editedTotals.expense)}</strong>
+              {Math.abs(editedTotals.expense - Number(edit.expense || 0)) > 0.0001 && (
+                <span className="historical-delta">Antes {money.format(edit.expense || 0)}</span>
+              )}
+            </div>
           </div>
 
-          <Field label="Concepto actual">
-            <input value={edit.oldConcept || ''} disabled />
-          </Field>
+          <div className="form-row">
+            <Field label="Concepto actual">
+              <input value={edit.oldConcept || ''} disabled />
+            </Field>
 
-          <Field label="Nuevo concepto">
-            <input
-              list="conceptos-edicion-historica"
-              required
-              value={newConcept}
-              onChange={(event) => setNewConcept(event.target.value)}
-            />
-            <datalist id="conceptos-edicion-historica">
-              {conceptOptions.map((item) => <option key={item} value={item} />)}
-            </datalist>
-          </Field>
+            <Field label="Nuevo concepto">
+              <input
+                list="conceptos-edicion-historica"
+                required
+                value={newConcept}
+                onChange={(event) => setNewConcept(event.target.value)}
+              />
+              <datalist id="conceptos-edicion-historica">
+                {conceptOptions.map((item) => <option key={item} value={item} />)}
+              </datalist>
+            </Field>
+          </div>
+
+          <div className="historical-values-head">
+            <div>
+              <strong>Movimientos incluidos</strong>
+              <span>{number.format(rows.length)} registros · {number.format(changedValueCount)} con importes modificados</span>
+            </div>
+            <div className={editedTotals.result >= 0 ? 'income' : 'expense'}>
+              Resultado: <strong>{money.format(editedTotals.result)}</strong>
+            </div>
+          </div>
+
+          <div className="table-wrap historical-values-table-wrap">
+            <table className="historical-values-table">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Detalle</th>
+                  <th>Operación</th>
+                  <th>Entrada ($)</th>
+                  <th>Salida ($)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.id}>
+                    <td>{formatDate(row.date)}</td>
+                    <td className="historical-detail-cell" title={row.detail}>{row.detail || '-'}</td>
+                    <td>{row.operation || '-'}</td>
+                    <td>
+                      <input
+                        className="historical-money-input income-input"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={row.income}
+                        onChange={(event) => updateRow(row.id, 'income', event.target.value)}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        className="historical-money-input expense-input"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={row.expense}
+                        onChange={(event) => updateRow(row.id, 'expense', event.target.value)}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colSpan={3}><strong>TOTAL EDITADO</strong></td>
+                  <td className="income money-cell"><strong>{money.format(editedTotals.income)}</strong></td>
+                  <td className="expense money-cell"><strong>{money.format(editedTotals.expense)}</strong></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
 
           <Field label={isOldExercise ? 'Motivo de modificación del ejercicio anterior *' : 'Motivo del cambio *'}>
             <textarea
@@ -2034,15 +2153,15 @@ function HistoricalConceptModal({ edit, conceptOptions, onClose, onSave }) {
               minLength={5}
               value={reason}
               onChange={(event) => setReason(event.target.value)}
-              placeholder="Ej.: reclasificación contable solicitada al revisar el ejercicio 2024."
+              placeholder="Ej.: corrección del importe según comprobante / reclasificación contable."
             />
           </Field>
 
           <div className="historical-warning">
             <strong>Quedará auditado.</strong>
             <span>
-              Se guardarán fecha, usuario, concepto anterior, concepto nuevo,
-              motivo, filtros aplicados y registros afectados.
+              Se guardarán usuario, fecha, motivo, concepto anterior/nuevo y, para cada registro
+              modificado, los importes anteriores y posteriores.
             </span>
           </div>
 
