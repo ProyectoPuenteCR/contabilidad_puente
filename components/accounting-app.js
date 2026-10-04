@@ -602,13 +602,19 @@ export default function AccountingApp() {
     return true;
   }
 
+  function toggleInstitution(id) {
+    setInstitutions((prev) => prev.map((entry) => (
+      entry.id === id ? { ...entry, active: entry.active === false } : entry
+    )));
+  }
+
   function deleteInstitution(id) {
     const item = institutions.find((entry) => entry.id === id);
     if (!item) return;
 
     const used = movements.some((row) => row.account === item.name);
     if (used) {
-      alert('No se puede eliminar porque existen movimientos asociados. Renombrala o reasigná primero esos movimientos.');
+      alert('Esta cuenta tiene movimientos históricos. Usá "Dar de baja" para ocultarla de nuevos registros sin perder el historial.');
       return;
     }
 
@@ -649,14 +655,14 @@ export default function AccountingApp() {
   }
 
   function deleteConcept(name) {
-    const used = movements.some((row) => row.concept === name);
-    if (used) {
-      alert('No se puede eliminar porque existen movimientos asociados. Podés renombrarlo desde Configuración.');
-      return;
-    }
+    const usage = movements.filter((row) => row.concept === name).length;
+    const message = usage
+      ? `El concepto tiene ${usage.toLocaleString('es-AR')} movimientos históricos. La baja lo quitará de los nuevos registros, pero no modificará el historial. ¿Continuar?`
+      : `¿Eliminar el concepto "${name}"?`;
 
-    if (confirm(`¿Eliminar el concepto "${name}"?`)) {
+    if (confirm(message)) {
       setConcepts((prev) => prev.filter((item) => item !== name));
+      if (concept === name) setConcept('TODOS');
     }
   }
 
@@ -1158,6 +1164,7 @@ export default function AccountingApp() {
               movements={movements}
               onAddInstitution={addInstitution}
               onRenameInstitution={renameInstitution}
+              onToggleInstitution={toggleInstitution}
               onDeleteInstitution={deleteInstitution}
               onAddConcept={addConcept}
               onRenameConcept={renameConcept}
@@ -1460,6 +1467,7 @@ function ConfigurationPanel({
   movements,
   onAddInstitution,
   onRenameInstitution,
+  onToggleInstitution,
   onDeleteInstitution,
   onAddConcept,
   onRenameConcept,
@@ -1541,6 +1549,7 @@ function ConfigurationPanel({
               <tr>
                 <th>Nombre</th>
                 <th>Tipo</th>
+                <th>Estado</th>
                 <th>Movimientos</th>
                 <th>Acciones</th>
               </tr>
@@ -1581,6 +1590,11 @@ function ConfigurationPanel({
                         <span className="config-type-pill">{item.type}</span>
                       )}
                     </td>
+                    <td>
+                      <span className={item.active === false ? 'config-status off' : 'config-status on'}>
+                        {item.active === false ? 'Baja' : 'Activo'}
+                      </span>
+                    </td>
                     <td>{number.format(institutionUsage[item.name] || 0)}</td>
                     <td>
                       <div className="config-actions">
@@ -1620,6 +1634,13 @@ function ConfigurationPanel({
                               })}
                             >
                               Editar
+                            </button>
+                            <button
+                              type="button"
+                              className="secondary small"
+                              onClick={() => onToggleInstitution(item.id)}
+                            >
+                              {item.active === false ? 'Activar' : 'Dar de baja'}
                             </button>
                             <button
                               type="button"
