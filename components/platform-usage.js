@@ -52,6 +52,11 @@ export default function PlatformUsage() {
   const [capacityMb, setCapacityMb] = useState('256');
   const [retentionDays, setRetentionDays] = useState('180');
   const [data, setData] = useState(null);
+  const [browserStorage, setBrowserStorage] = useState({
+    localBytes: 0,
+    originUsage: 0,
+    originQuota: 0,
+  });
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -82,6 +87,34 @@ export default function PlatformUsage() {
 
   useEffect(() => {
     load();
+
+    async function measureBrowserStorage() {
+      let localBytes = 0;
+
+      try {
+        for (let index = 0; index < localStorage.length; index += 1) {
+          const key = localStorage.key(index);
+          if (!key || !key.startsWith('puente.')) continue;
+          const value = localStorage.getItem(key) || '';
+          localBytes += new Blob([key, value]).size;
+        }
+      } catch {}
+
+      let originUsage = 0;
+      let originQuota = 0;
+
+      try {
+        if (navigator.storage?.estimate) {
+          const estimate = await navigator.storage.estimate();
+          originUsage = Number(estimate.usage || 0);
+          originQuota = Number(estimate.quota || 0);
+        }
+      } catch {}
+
+      setBrowserStorage({ localBytes, originUsage, originQuota });
+    }
+
+    measureBrowserStorage();
   }, []);
 
   function applyReference(value) {
@@ -265,6 +298,11 @@ export default function PlatformUsage() {
         <UsageKpi label="Espacio usado" value={formatKb(data?.storage?.usedKb || 0)} note="Estimado" />
         <UsageKpi label="Espacio restante" value={formatMb(data?.storage?.remainingMb || 0)} note="Estimado" />
         <UsageKpi label="Uso base" value={`${usagePct.toFixed(2)}%`} note={`${data?.storage?.keyCount || 0} claves`} />
+        <UsageKpi
+          label="Datos contables locales"
+          value={formatKb(browserStorage.localBytes / 1024)}
+          note="Este navegador"
+        />
       </section>
 
       <section className="usage-capacity-card">
@@ -293,6 +331,22 @@ export default function PlatformUsage() {
           El cálculo es una estimación basada en las claves y payloads de Redis de este sistema.
           Configurá arriba la capacidad real de tu plan para usarlo como alarma preventiva.
         </p>
+      </section>
+
+      <section className="usage-local-storage-card">
+        <div>
+          <h3>Datos contables guardados en este navegador</h3>
+          <p>
+            Actualmente el Libro, horas, inversiones, configuración y auditoría se conservan
+            en almacenamiento local del navegador. Este bloque mide ese espacio por separado
+            de Redis para no confundir ambas capacidades.
+          </p>
+        </div>
+        <div className="usage-local-storage-values">
+          <span><small>Claves Puente</small><strong>{formatKb(browserStorage.localBytes / 1024)}</strong></span>
+          <span><small>Uso total del origen</small><strong>{formatMb(browserStorage.originUsage / 1024 / 1024)}</strong></span>
+          <span><small>Cuota estimada navegador</small><strong>{formatMb(browserStorage.originQuota / 1024 / 1024)}</strong></span>
+        </div>
       </section>
 
       <div className="usage-grid">
