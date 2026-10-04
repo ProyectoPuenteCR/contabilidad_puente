@@ -1066,7 +1066,12 @@ export default function AccountingApp({ user = null }) {
                   </thead>
                   <tbody>
                     {statisticsConcepts.map((item) => (
-                      <tr key={item.concept}>
+                      <tr
+                        key={item.concept}
+                        className="statistics-edit-row"
+                        onDoubleClick={() => openHistoricalConceptEdit(item)}
+                        title="Doble clic para editar la clasificación y dejar trazabilidad"
+                      >
                         <td>{item.concept}</td>
                         <td className="income money-cell">{money.format(item.income)}</td>
                         <td className="expense money-cell">{money.format(item.expense)}</td>
@@ -1215,6 +1220,17 @@ export default function AccountingApp({ user = null }) {
               subtitle="Administración de cuentas y conceptos utilizados en toda la aplicación."
             />
 
+            <BackupTools
+              user={user}
+              movements={movements}
+              hours={hours}
+              investments={investments}
+              institutions={institutions}
+              concepts={concepts}
+              saldoSnapshot={saldoSnapshot}
+              auditLog={auditLog}
+            />
+
             <ConfigurationPanel
               institutions={institutions}
               concepts={concepts}
@@ -1227,6 +1243,8 @@ export default function AccountingApp({ user = null }) {
               onRenameConcept={renameConcept}
               onDeleteConcept={deleteConcept}
             />
+
+            <AuditLogCard auditLog={auditLog} />
           </>
         )}
 
@@ -1289,6 +1307,15 @@ export default function AccountingApp({ user = null }) {
           conceptOptions={availableConcepts}
           accountOptions={availableAccounts}
           initialMovement={editingMovement}
+        />
+      )}
+
+      {historicalEdit && (
+        <HistoricalConceptModal
+          edit={historicalEdit}
+          conceptOptions={availableConcepts}
+          onClose={() => setHistoricalEdit(null)}
+          onSave={saveHistoricalConceptEdit}
         />
       )}
     </div>
@@ -1813,6 +1840,146 @@ function ConfigurationPanel({
           </table>
         </div>
       </Card>
+    </div>
+  );
+}
+
+function AuditLogCard({ auditLog }) {
+  const rows = (auditLog || []).slice(0, 100);
+
+  return (
+    <Card title="Log de cambios históricos">
+      <div className="configuration-help">
+        Registra las modificaciones realizadas desde Estadísticas sobre ejercicios
+        históricos, incluyendo usuario, motivo y cantidad de movimientos afectados.
+      </div>
+      <div className="table-wrap audit-table-wrap">
+        <table className="audit-table">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Usuario</th>
+              <th>Acción</th>
+              <th>Anterior</th>
+              <th>Nuevo</th>
+              <th>Motivo</th>
+              <th>Filtro</th>
+              <th>Registros</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.id}>
+                <td>{row.at ? new Date(row.at).toLocaleString('es-AR') : '-'}</td>
+                <td>
+                  <strong>{row.userName || '-'}</strong>
+                  <small>{row.userEmail || ''}</small>
+                </td>
+                <td>{row.action || '-'}</td>
+                <td>{row.oldConcept || '-'}</td>
+                <td>{row.newConcept || '-'}</td>
+                <td className="audit-reason" title={row.reason}>{row.reason || '-'}</td>
+                <td>{`${row.account || 'Todas'} / ${row.year || 'Todos'}`}</td>
+                <td className="money-cell">{number.format(row.affectedCount || 0)}</td>
+              </tr>
+            ))}
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={8} className="audit-empty">Todavía no hay cambios históricos registrados.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+function HistoricalConceptModal({ edit, conceptOptions, onClose, onSave }) {
+  const [newConcept, setNewConcept] = useState(edit.newConcept || edit.oldConcept || '');
+  const [reason, setReason] = useState('');
+
+  const historicalYears = (edit.years || []).join(', ') || '-';
+  const currentYear = String(new Date().getFullYear());
+  const isOldExercise = (edit.years || []).some((item) => String(item) < currentYear);
+
+  function submit(event) {
+    event.preventDefault();
+
+    if (!String(newConcept || '').trim() || !String(reason || '').trim()) {
+      return;
+    }
+
+    onSave({ newConcept, reason });
+  }
+
+  return (
+    <div className="modal-backdrop" onMouseDown={onClose}>
+      <div className="modal historical-edit-modal" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="modal-head">
+          <div>
+            <span className={isOldExercise ? 'historical-badge warning' : 'historical-badge'}>
+              {isOldExercise ? 'Ejercicio histórico' : 'Edición agrupada'}
+            </span>
+            <h2>Editar resumen por concepto</h2>
+            <p>
+              Esta fila es un cálculo agrupado. Se modificará únicamente la clasificación
+              de los {number.format(edit.affectedCount || 0)} movimientos incluidos por los filtros actuales.
+            </p>
+          </div>
+          <button className="icon-btn" type="button" onClick={onClose}>×</button>
+        </div>
+
+        <form onSubmit={submit}>
+          <div className="historical-summary-grid">
+            <div><small>Ejercicio(s)</small><strong>{historicalYears}</strong></div>
+            <div><small>Cuenta</small><strong>{edit.account || 'Todas'}</strong></div>
+            <div><small>Ingresos actuales</small><strong className="income">{money.format(edit.income || 0)}</strong></div>
+            <div><small>Gastos actuales</small><strong className="expense">{money.format(edit.expense || 0)}</strong></div>
+          </div>
+
+          <Field label="Concepto actual">
+            <input value={edit.oldConcept || ''} disabled />
+          </Field>
+
+          <Field label="Nuevo concepto">
+            <input
+              list="conceptos-edicion-historica"
+              required
+              value={newConcept}
+              onChange={(event) => setNewConcept(event.target.value)}
+            />
+            <datalist id="conceptos-edicion-historica">
+              {conceptOptions.map((item) => <option key={item} value={item} />)}
+            </datalist>
+          </Field>
+
+          <Field label={isOldExercise ? 'Motivo de modificación del ejercicio anterior *' : 'Motivo del cambio *'}>
+            <textarea
+              required
+              minLength={5}
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              placeholder="Ej.: reclasificación contable solicitada al revisar el ejercicio 2024."
+            />
+          </Field>
+
+          <div className="historical-warning">
+            <strong>Quedará auditado.</strong>
+            <span>
+              Se guardarán fecha, usuario, concepto anterior, concepto nuevo,
+              motivo, filtros aplicados y registros afectados.
+            </span>
+          </div>
+
+          <div className="modal-actions">
+            <button type="button" className="secondary" onClick={onClose}>Cancelar</button>
+            <button className="primary" disabled={!newConcept.trim() || reason.trim().length < 5}>
+              Guardar cambio histórico
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
