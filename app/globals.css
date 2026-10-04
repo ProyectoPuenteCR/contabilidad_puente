@@ -322,3 +322,18 @@ button.small{padding:7px 10px;font-size:10px}
     grid-template-columns:1fr;
   }
 }
+
+
+.config-status{
+  display:inline-flex;
+  align-items:center;
+  min-height:24px;
+  padding:3px 8px;
+  border-radius:999px;
+  font-size:10px;
+  font-weight:800;
+}
+.config-status.on{background:#e6f6ee;color:#147c53}
+.config-status.off{background:#f5e9ea;color:#a53a44}
+.dark .config-status.on{background:#173a2c;color:#8ee1b9}
+.dark .config-status.off{background:#46262a;color:#ff9ea7}
