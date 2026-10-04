@@ -2736,3 +2736,33 @@ button.small{padding:7px 10px;font-size:10px}
     width:100%;
   }
 }
+
+
+/* --- Libro: orden de columnas --- */
+.ledger-sort-row th{
+  z-index:4;
+}
+.ledger-sort-button{
+  width:100%;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  padding:0 10px 0 0;
+  border:0;
+  background:transparent;
+  color:inherit;
+  font:inherit;
+  font-weight:800;
+  cursor:pointer;
+  text-align:left;
+}
+.ledger-sort-button:hover{
+  color:var(--blue);
+}
+.ledger-sort-button b{
+  flex:0 0 auto;
+  color:var(--blue);
+  font-size:11px;
+  font-weight:900;
+}
