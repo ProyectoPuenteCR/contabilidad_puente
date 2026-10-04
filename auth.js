@@ -4,6 +4,7 @@ import Credentials from 'next-auth/providers/credentials';
 import { getAdminEmail, isAuthConfigured } from './lib/auth-config';
 import {
   isAllowedGoogleEmail,
+  logUsageEvent,
   normalizeEmail,
   verifyEmergencyCode,
 } from './lib/access-store';
@@ -61,13 +62,44 @@ export const {
   callbacks: {
     async signIn({ user, account, profile }) {
       if (account?.provider === 'emergency') {
-        return normalizeEmail(user?.email) === getAdminEmail();
+        const allowed = normalizeEmail(user?.email) === getAdminEmail();
+        await logUsageEvent({
+          email: user?.email,
+          type: 'login',
+          module: 'login',
+          success: allowed,
+          details: { method: 'emergency' },
+        });
+        return allowed;
       }
 
       if (account?.provider === 'google') {
-        if (profile?.email_verified !== true) return false;
-        return isAllowedGoogleEmail(user?.email);
+        const verified = profile?.email_verified === true;
+        const allowed = verified
+          ? await isAllowedGoogleEmail(user?.email)
+          : false;
+
+        await logUsageEvent({
+          email: user?.email,
+          type: 'login',
+          module: 'login',
+          success: allowed,
+          details: {
+            method: 'google',
+            verified,
+          },
+        });
+
+        return allowed;
       }
+
+      await logUsageEvent({
+        email: user?.email,
+        type: 'login',
+        module: 'login',
+        success: false,
+        details: { method: account?.provider || 'unknown' },
+      });
 
       return false;
     },
