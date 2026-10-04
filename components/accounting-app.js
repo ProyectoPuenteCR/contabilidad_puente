@@ -1937,6 +1937,7 @@ function AuditLogCard({ auditLog }) {
               <th>Anterior</th>
               <th>Nuevo</th>
               <th>Motivo</th>
+              <th>Importes antes → después</th>
               <th>Filtro</th>
               <th>Registros</th>
             </tr>
@@ -1953,13 +1954,28 @@ function AuditLogCard({ auditLog }) {
                 <td>{row.oldConcept || '-'}</td>
                 <td>{row.newConcept || '-'}</td>
                 <td className="audit-reason" title={row.reason}>{row.reason || '-'}</td>
+                <td className="audit-values">
+                  <span>
+                    Entrada: {money.format(row.previousIncome || 0)} → {money.format(
+                      row.newIncome ?? row.previousIncome ?? 0
+                    )}
+                  </span>
+                  <span>
+                    Salida: {money.format(row.previousExpense || 0)} → {money.format(
+                      row.newExpense ?? row.previousExpense ?? 0
+                    )}
+                  </span>
+                  {Number(row.changedValueCount || 0) > 0 && (
+                    <small>{number.format(row.changedValueCount)} movimiento(s) con importes corregidos</small>
+                  )}
+                </td>
                 <td>{`${row.account || 'Todas'} / ${row.year || 'Todos'}`}</td>
                 <td className="money-cell">{number.format(row.affectedCount || 0)}</td>
               </tr>
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={8} className="audit-empty">Todavía no hay cambios históricos registrados.</td>
+                <td colSpan={9} className="audit-empty">Todavía no hay cambios históricos registrados.</td>
               </tr>
             )}
           </tbody>
