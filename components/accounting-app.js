@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import { useEffect, useMemo, useState } from 'react';
-import { accounts, initialHours, initialMovements } from '../lib/seed';
+import { accounts, initialHours, initialMovements, initialSaldoSnapshot } from '../lib/seed';
 import ExcelTools from './excel-tools';
 
 const money = new Intl.NumberFormat('es-AR', {
@@ -107,7 +107,7 @@ export default function AccountingApp() {
   const [section, setSection] = useState('book');
   const [movements, setMovements] = useState(initialMovements);
   const [hours, setHours] = useState(initialHours);
-  const [saldoSnapshot, setSaldoSnapshot] = useState(null);
+  const [saldoSnapshot, setSaldoSnapshot] = useState(initialSaldoSnapshot);
   const [ready, setReady] = useState(false);
   const [query, setQuery] = useState('');
   const [account, setAccount] = useState('TODAS');
@@ -122,9 +122,11 @@ export default function AccountingApp() {
     const storedMovements = loadStored('puente.movements', initialMovements);
     const storedHours = loadStored('puente.hours', initialHours);
 
+    const storedSaldoSnapshot = loadStored('puente.saldoSnapshot', null);
+
     setMovements(isLegacyDemoMovements(storedMovements) ? [] : storedMovements);
     setHours(isLegacyDemoHours(storedHours) ? [] : storedHours);
-    setSaldoSnapshot(loadStored('puente.saldoSnapshot', null));
+    setSaldoSnapshot(storedSaldoSnapshot || initialSaldoSnapshot);
     setDark(loadStored('puente.dark', false));
     setCompact(loadStored('puente.compact', false));
     setColumnWidths({
@@ -309,7 +311,7 @@ export default function AccountingApp() {
   const grossCurrent = saldoSnapshot?.grossCurrent;
   const currentBalanceLabel = saldoSnapshot
     ? money.format(grossCurrent || 0)
-    : 'Reimportar Excel';
+    : 'Excel original';
 
   function saveMovement(data) {
     setMovements((prev) => [{ id: crypto.randomUUID(), ...data }, ...prev]);
@@ -411,13 +413,13 @@ export default function AccountingApp() {
                 label="Saldo actual bruto total"
                 value={currentBalanceLabel}
                 tone="blue"
-                hint={saldoSnapshot ? 'Incluye inversiones · hoja Saldo' : 'Reimporte el Excel original'}
+                hint={saldoSnapshot ? 'Incluye inversiones · hoja Saldo' : 'Datos recuperados del Excel original'}
               />
               <Metric
                 label="Dinero disponible"
-                value={saldoSnapshot ? money.format(saldoSnapshot.available || 0) : 'Reimportar Excel'}
+                value={saldoSnapshot ? money.format(saldoSnapshot.available || 0) : 'Excel original'}
                 tone="green"
-                hint={saldoSnapshot ? 'Disponibilidad informada en la hoja Saldo' : 'Falta importar la hoja Saldo'}
+                hint={saldoSnapshot ? 'Disponibilidad informada en la hoja Saldo' : 'Valores recuperados del archivo original'}
               />
             </div>
 
@@ -452,7 +454,7 @@ export default function AccountingApp() {
               </section>
             ) : (
               <div className="data-warning book-saldo-warning">
-                Reimporte el Excel original para mostrar aquí el <strong>Saldo actual</strong>,
+                Datos recuperados del Excel original para mostrar aquí el <strong>Saldo actual</strong>,
                 <strong> Dinero disponible</strong> y los saldos por banco.
               </div>
             )}
