@@ -461,6 +461,23 @@ export default function AccountingApp() {
 
   const expenseAverage = expenses.length ? expenseTotal / expenses.length : 0;
 
+  const statisticsConcepts = useMemo(() => {
+    const map = {};
+
+    for (const row of filtered) {
+      const key = row.concept || 'Sin concepto';
+      if (!map[key]) map[key] = { concept: key, income: 0, expense: 0, count: 0 };
+      map[key].income += Number(row.income || 0);
+      map[key].expense += Number(row.expense || 0);
+      map[key].count += 1;
+    }
+
+    return Object.values(map)
+      .map((item) => ({ ...item, result: item.income - item.expense }))
+      .sort((a, b) => (b.income + b.expense) - (a.income + a.expense))
+      .slice(0, 12);
+  }, [filtered]);
+
   const saldoCalculated = useMemo(
     () => calculateSaldo(movements, saldoSnapshot),
     [movements, saldoSnapshot]
