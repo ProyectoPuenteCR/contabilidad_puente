@@ -4,35 +4,38 @@ import Link from 'next/link';
 import { signOut } from 'next-auth/react';
 
 export default function AuthToolbar({ user }) {
+  if (!user) return null;
+
   return (
-    <div className="auth-toolbar">
-      <div className="auth-user">
-        <span className="auth-avatar">
+    <div className="sidebar-auth">
+      <div className="sidebar-auth-user">
+        <span className="sidebar-auth-avatar">
           {(user?.name || user?.email || 'U')
             .slice(0, 1)
             .toUpperCase()}
         </span>
-        <span className="auth-user-copy">
-          <strong>
-            {user?.name || 'Usuario autorizado'}
-          </strong>
-          <small>{user?.email}</small>
+
+        <span className="sidebar-auth-copy">
+          <strong>{user?.name || 'Usuario autorizado'}</strong>
+          <small title={user?.email}>{user?.email}</small>
         </span>
       </div>
 
-      {user?.role === 'admin' && (
-        <Link className="auth-link" href="/admin/accesos">
-          Accesos
-        </Link>
-      )}
+      <div className="sidebar-auth-actions">
+        {user?.role === 'admin' && (
+          <Link className="sidebar-auth-link" href="/admin/accesos">
+            Accesos
+          </Link>
+        )}
 
-      <button
-        type="button"
-        className="auth-signout"
-        onClick={() => signOut({ redirectTo: '/login' })}
-      >
-        Salir
-      </button>
+        <button
+          type="button"
+          className="sidebar-auth-signout"
+          onClick={() => signOut({ redirectTo: '/login' })}
+        >
+          Salir
+        </button>
+      </div>
     </div>
   );
 }
