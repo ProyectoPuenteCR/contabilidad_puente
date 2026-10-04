@@ -89,31 +89,48 @@ function summarize(rows) {
   );
 }
 
-function calculateSaldo(movements, snapshot) {
-  const byBank = new Map();
+function calculateSaldo(movements, snapshot, institutions = []) {
+  const byAccount = new Map();
 
   for (const row of movements) {
-    const bank = String(row.account || '').trim().toUpperCase();
-    if (!bank) continue;
-    byBank.set(
-      bank,
-      Number(byBank.get(bank) || 0) +
+    const accountName = String(row.account || '').trim().toUpperCase();
+    if (!accountName) continue;
+
+    byAccount.set(
+      accountName,
+      Number(byAccount.get(accountName) || 0) +
         Number(row.income || 0) -
         Number(row.expense || 0)
     );
   }
 
-  const bankValue = (name) => Number(byBank.get(name) || 0);
+  const configured = institutions.length
+    ? institutions
+    : [...new Set(movements.map((row) => String(row.account || '').trim()).filter(Boolean))]
+        .map((name) => ({ name, type: 'Otro', active: true }));
 
-  const futureReceivables = (snapshot?.futureReceivableItems || [])
-    .reduce((sum, value) => sum + Number(value || 0), 0);
+  const bankRows = configured.map((item) => ({
+    name: item.name,
+    type: item.type || 'Otro',
+    active: item.active !== false,
+    value: Number(byAccount.get(String(item.name || '').toUpperCase()) || 0),
+  }));
 
-  const certification45 = (snapshot?.certification45Items || [])
-    .reduce(
-      (sum, item) =>
-        sum + Number(item?.hours || 0) * Number(item?.rate || 0),
-      0
-    );
+  // El saldo actual se obtiene siempre desde el Libro:
+  // Entradas - Salidas de todas las cuentas configuradas.
+  const grossCurrent = bankRows.reduce(
+    (sum, item) => sum + Number(item.value || 0),
+    0
+  );
+
+  const bankCash = Number(snapshot?.bankCash || 0);
+
+  // "Dinero disponible": efectivo auxiliar + billeteras virtuales +
+  // cuentas marcadas como Efectivo. Los bancos quedan fuera porque pueden
+  // incluir capital invertido.
+  const available = bankCash + bankRows
+    .filter((item) => item.type === 'Billetera virtual' || item.type === 'Efectivo')
+    .reduce((sum, item) => sum + Number(item.value || 0), 0);
 
   const investmentPrincipal = (snapshot?.investmentPrincipalParts || [])
     .reduce((sum, value) => sum + Number(value || 0), 0);
@@ -122,58 +139,6 @@ function calculateSaldo(movements, snapshot) {
   const investmentMaturity = (snapshot?.investmentMaturityParts || [])
     .reduce((sum, value) => sum + Number(value || 0), 0);
 
-  // Excel Saldo!C10:C14
-  const actualBanks = {
-    CREDICOOP: bankValue('CREDICOOP'),
-    'MERCADO LIBRE': bankValue('MERCADO LIBRE'),
-    'MERCADO LIBRE 2': bankValue('MERCADO LIBRE 2'),
-    EFECTIVO: bankValue('EFECTIVO'),
-    PREX: bankValue('PREX'),
-  };
-
-  // Excel Saldo!C4 = SUM(C10:C13)
-  const grossCurrent =
-    actualBanks.CREDICOOP +
-    actualBanks['MERCADO LIBRE'] +
-    actualBanks['MERCADO LIBRE 2'] +
-    actualBanks.EFECTIVO;
-
-  // Excel Saldo!C3 = C4 + E26, E26 = SUM(G28:G30)
-  const grossPlusReceivables = grossCurrent + futureReceivables;
-
-  const bankCash = Number(snapshot?.bankCash || 0);
-
-  // Excel Saldo!C6 = SUM(I5 + D11 + C13 + D12)
-  const available =
-    bankCash +
-    actualBanks['MERCADO LIBRE'] +
-    actualBanks.EFECTIVO +
-    actualBanks['MERCADO LIBRE 2'];
-
-  // Excel control column D/E.
-  const controlBanks = {
-    CREDICOOP: investmentMaturity + bankCash, // D10 = L12 + I5
-    'MERCADO LIBRE': actualBanks['MERCADO LIBRE'],
-    'MERCADO LIBRE 2': actualBanks['MERCADO LIBRE 2'],
-    EFECTIVO: actualBanks.EFECTIVO,
-    PREX: actualBanks.PREX,
-    'PERSONAL PAY': 0,
-  };
-
-  const bankRows = [
-    { name: 'CREDICOOP', value: actualBanks.CREDICOOP },
-    { name: 'MERCADO LIBRE', value: actualBanks['MERCADO LIBRE'] },
-    { name: 'MERCADO LIBRE 2', value: actualBanks['MERCADO LIBRE 2'] },
-    { name: 'EFECTIVO', value: actualBanks.EFECTIVO },
-    { name: 'PREX', value: actualBanks.PREX },
-    // C15 is blank in the original workbook.
-    { name: 'PERSONAL PAY', value: null },
-  ].map((bank) => {
-    const calculation = Number(controlBanks[bank.name] || 0);
-    const balance = bank.value == null ? 0 : calculation - bank.value;
-    return { ...bank, calculation, balance };
-  });
-
   const monthExpense = Number(snapshot?.monthExpense || 0);
   const monthIncome = Number(snapshot?.monthIncome || 0);
   const monthBalance = monthIncome - monthExpense;
@@ -181,12 +146,9 @@ function calculateSaldo(movements, snapshot) {
   const savingMargin = monthIncome ? 1 - expenseRatio : 0;
 
   return {
-    status: grossCurrent === 0 ? 'NEGATIVO' : 'POSITIVO',
+    status: grossCurrent >= 0 ? 'POSITIVO' : 'NEGATIVO',
     grossCurrent,
-    grossPlusReceivables,
     available,
-    futureReceivables,
-    certification45,
     bankRows,
     banks: bankRows.map(({ name, value }) => ({ name, value })),
     bankCash,
@@ -479,8 +441,8 @@ export default function AccountingApp() {
   }, [filtered]);
 
   const saldoCalculated = useMemo(
-    () => calculateSaldo(movements, saldoSnapshot),
-    [movements, saldoSnapshot]
+    () => calculateSaldo(movements, saldoSnapshot, institutions),
+    [movements, saldoSnapshot, institutions]
   );
 
   const currentBalanceLabel = money.format(
