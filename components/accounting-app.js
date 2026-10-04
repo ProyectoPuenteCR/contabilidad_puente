@@ -565,22 +565,80 @@ export default function AccountingApp({ user = null }) {
       income: item?.income || 0,
       expense: item?.expense || 0,
       result: item?.result || 0,
+      rows: rows.map((row) => ({
+        id: row.id,
+        date: row.date || '',
+        account: row.account || '',
+        detail: row.detail || '',
+        operation: row.operation || '',
+        invoice: row.invoice || '',
+        concept: row.concept || '',
+        income: Number(row.income || 0),
+        expense: Number(row.expense || 0),
+      })),
     });
   }
 
   function saveHistoricalConceptEdit(payload) {
     const nextConcept = String(payload?.newConcept || '').trim();
     const reason = String(payload?.reason || '').trim();
+    const editedRows = Array.isArray(payload?.rows) ? payload.rows : [];
 
-    if (!historicalEdit || !nextConcept || !reason) return;
+    if (!historicalEdit || !nextConcept || reason.length < 5) return;
 
+    const originalById = new Map(
+      (historicalEdit.rows || []).map((row) => [row.id, row])
+    );
+    const editedById = new Map(
+      editedRows.map((row) => [row.id, row])
+    );
     const ids = new Set(historicalEdit.affectedIds || []);
 
-    setMovements((prev) => prev.map((row) => (
-      ids.has(row.id)
-        ? { ...row, concept: nextConcept }
-        : row
-    )));
+    const valueChanges = [];
+    let nextIncome = 0;
+    let nextExpense = 0;
+
+    for (const id of ids) {
+      const before = originalById.get(id);
+      const after = editedById.get(id) || before;
+      if (!before || !after) continue;
+
+      const beforeIncome = Number(before.income || 0);
+      const beforeExpense = Number(before.expense || 0);
+      const afterIncome = Math.max(0, Number(after.income || 0));
+      const afterExpense = Math.max(0, Number(after.expense || 0));
+
+      nextIncome += afterIncome;
+      nextExpense += afterExpense;
+
+      if (
+        Math.abs(beforeIncome - afterIncome) > 0.0001 ||
+        Math.abs(beforeExpense - afterExpense) > 0.0001
+      ) {
+        valueChanges.push({
+          id,
+          date: before.date || '',
+          detail: before.detail || '',
+          operation: before.operation || '',
+          beforeIncome,
+          beforeExpense,
+          afterIncome,
+          afterExpense,
+        });
+      }
+    }
+
+    setMovements((prev) => prev.map((row) => {
+      if (!ids.has(row.id)) return row;
+
+      const edited = editedById.get(row.id);
+      return {
+        ...row,
+        concept: nextConcept,
+        income: edited ? Math.max(0, Number(edited.income || 0)) : Number(row.income || 0),
+        expense: edited ? Math.max(0, Number(edited.expense || 0)) : Number(row.expense || 0),
+      };
+    }));
 
     if (!concepts.includes(nextConcept)) {
       setConcepts((prev) => [...prev, nextConcept]
@@ -591,12 +649,19 @@ export default function AccountingApp({ user = null }) {
       setConcept(nextConcept);
     }
 
+    const nextResult = nextIncome - nextExpense;
+    const conceptChanged = nextConcept !== historicalEdit.oldConcept;
+
     const logEntry = {
       id: crypto.randomUUID(),
       at: new Date().toISOString(),
       userName: user?.name || 'Usuario',
       userEmail: user?.email || '',
-      action: 'Edición histórica desde Estadísticas',
+      action: valueChanges.length && conceptChanged
+        ? 'Edición histórica de concepto e importes'
+        : valueChanges.length
+          ? 'Edición histórica de importes'
+          : 'Edición histórica de concepto',
       oldConcept: historicalEdit.oldConcept,
       newConcept: nextConcept,
       reason,
@@ -605,9 +670,14 @@ export default function AccountingApp({ user = null }) {
       years: historicalEdit.years,
       affectedCount: historicalEdit.affectedCount,
       affectedIds: historicalEdit.affectedIds,
-      previousIncome: historicalEdit.income,
-      previousExpense: historicalEdit.expense,
-      previousResult: historicalEdit.result,
+      previousIncome: Number(historicalEdit.income || 0),
+      previousExpense: Number(historicalEdit.expense || 0),
+      previousResult: Number(historicalEdit.result || 0),
+      newIncome: nextIncome,
+      newExpense: nextExpense,
+      newResult: nextResult,
+      changedValueCount: valueChanges.length,
+      valueChanges,
     };
 
     setAuditLog((prev) => [logEntry, ...prev].slice(0, 1000));
