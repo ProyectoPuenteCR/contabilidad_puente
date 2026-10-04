@@ -1454,6 +1454,291 @@ function Bars({ data }) {
   );
 }
 
+function ConfigurationPanel({
+  institutions,
+  concepts,
+  movements,
+  onAddInstitution,
+  onRenameInstitution,
+  onDeleteInstitution,
+  onAddConcept,
+  onRenameConcept,
+  onDeleteConcept,
+}) {
+  const [newInstitution, setNewInstitution] = useState({ name: '', type: 'Banco' });
+  const [editingInstitution, setEditingInstitution] = useState(null);
+  const [newConcept, setNewConcept] = useState('');
+  const [editingConcept, setEditingConcept] = useState(null);
+
+  const institutionUsage = useMemo(() => {
+    const map = {};
+    for (const row of movements) {
+      const key = String(row.account || '').trim();
+      if (!key) continue;
+      map[key] = (map[key] || 0) + 1;
+    }
+    return map;
+  }, [movements]);
+
+  const conceptUsage = useMemo(() => {
+    const map = {};
+    for (const row of movements) {
+      const key = String(row.concept || '').trim();
+      if (!key) continue;
+      map[key] = (map[key] || 0) + 1;
+    }
+    return map;
+  }, [movements]);
+
+  function submitInstitution(event) {
+    event.preventDefault();
+    if (onAddInstitution(newInstitution.name, newInstitution.type)) {
+      setNewInstitution({ name: '', type: 'Banco' });
+    }
+  }
+
+  function submitConcept(event) {
+    event.preventDefault();
+    if (onAddConcept(newConcept)) setNewConcept('');
+  }
+
+  return (
+    <div className="configuration-layout">
+      <Card title="Bancos, billeteras y otros medios">
+        <div className="configuration-help">
+          Todo el sistema toma los nombres desde acá. Si renombrás una cuenta,
+          también se actualizan los movimientos históricos que usan ese nombre.
+        </div>
+
+        <form className="config-add-form" onSubmit={submitInstitution}>
+          <input
+            value={newInstitution.name}
+            onChange={(event) => setNewInstitution((current) => ({
+              ...current,
+              name: event.target.value,
+            }))}
+            placeholder="Nombre, por ejemplo CREDICOOP"
+            required
+          />
+          <select
+            value={newInstitution.type}
+            onChange={(event) => setNewInstitution((current) => ({
+              ...current,
+              type: event.target.value,
+            }))}
+          >
+            <option>Banco</option>
+            <option>Billetera virtual</option>
+            <option>Efectivo</option>
+            <option>Otro</option>
+          </select>
+          <button className="primary" type="submit">＋ Agregar</button>
+        </form>
+
+        <div className="table-wrap">
+          <table className="configuration-table">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Tipo</th>
+                <th>Movimientos</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {institutions.map((item) => {
+                const editing = editingInstitution?.id === item.id;
+                return (
+                  <tr key={item.id}>
+                    <td>
+                      {editing ? (
+                        <input
+                          value={editingInstitution.name}
+                          onChange={(event) => setEditingInstitution((current) => ({
+                            ...current,
+                            name: event.target.value,
+                          }))}
+                        />
+                      ) : (
+                        <strong>{item.name}</strong>
+                      )}
+                    </td>
+                    <td>
+                      {editing ? (
+                        <select
+                          value={editingInstitution.type}
+                          onChange={(event) => setEditingInstitution((current) => ({
+                            ...current,
+                            type: event.target.value,
+                          }))}
+                        >
+                          <option>Banco</option>
+                          <option>Billetera virtual</option>
+                          <option>Efectivo</option>
+                          <option>Otro</option>
+                        </select>
+                      ) : (
+                        <span className="config-type-pill">{item.type}</span>
+                      )}
+                    </td>
+                    <td>{number.format(institutionUsage[item.name] || 0)}</td>
+                    <td>
+                      <div className="config-actions">
+                        {editing ? (
+                          <>
+                            <button
+                              type="button"
+                              className="primary small"
+                              onClick={() => {
+                                onRenameInstitution(
+                                  item.id,
+                                  editingInstitution.name,
+                                  editingInstitution.type
+                                );
+                                setEditingInstitution(null);
+                              }}
+                            >
+                              Guardar
+                            </button>
+                            <button
+                              type="button"
+                              className="secondary small"
+                              onClick={() => setEditingInstitution(null)}
+                            >
+                              Cancelar
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              className="secondary small"
+                              onClick={() => setEditingInstitution({
+                                id: item.id,
+                                name: item.name,
+                                type: item.type,
+                              })}
+                            >
+                              Editar
+                            </button>
+                            <button
+                              type="button"
+                              className="secondary small danger-text"
+                              onClick={() => onDeleteInstitution(item.id)}
+                            >
+                              Eliminar
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <Card title="Conceptos">
+        <div className="configuration-help">
+          Los conceptos del Libro se administran desde esta lista. Al renombrar
+          uno, se actualiza automáticamente en todos los movimientos asociados.
+        </div>
+
+        <form className="config-add-form config-add-concept" onSubmit={submitConcept}>
+          <input
+            value={newConcept}
+            onChange={(event) => setNewConcept(event.target.value)}
+            placeholder="Nuevo concepto"
+            required
+          />
+          <button className="primary" type="submit">＋ Agregar concepto</button>
+        </form>
+
+        <div className="table-wrap config-concepts-table-wrap">
+          <table className="configuration-table">
+            <thead>
+              <tr>
+                <th>Concepto</th>
+                <th>Movimientos</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {concepts.map((item) => {
+                const editing = editingConcept?.original === item;
+                return (
+                  <tr key={item}>
+                    <td>
+                      {editing ? (
+                        <input
+                          value={editingConcept.value}
+                          onChange={(event) => setEditingConcept((current) => ({
+                            ...current,
+                            value: event.target.value,
+                          }))}
+                        />
+                      ) : item}
+                    </td>
+                    <td>{number.format(conceptUsage[item] || 0)}</td>
+                    <td>
+                      <div className="config-actions">
+                        {editing ? (
+                          <>
+                            <button
+                              type="button"
+                              className="primary small"
+                              onClick={() => {
+                                if (onRenameConcept(item, editingConcept.value)) {
+                                  setEditingConcept(null);
+                                }
+                              }}
+                            >
+                              Guardar
+                            </button>
+                            <button
+                              type="button"
+                              className="secondary small"
+                              onClick={() => setEditingConcept(null)}
+                            >
+                              Cancelar
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              className="secondary small"
+                              onClick={() => setEditingConcept({
+                                original: item,
+                                value: item,
+                              })}
+                            >
+                              Editar
+                            </button>
+                            <button
+                              type="button"
+                              className="secondary small danger-text"
+                              onClick={() => onDeleteConcept(item)}
+                            >
+                              Eliminar
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 function Modal({ type, onClose, onMovement, onHours, conceptOptions, accountOptions, initialMovement }) {
   const isHours = type === 'hours';
   const isExpense = type === 'expense';
