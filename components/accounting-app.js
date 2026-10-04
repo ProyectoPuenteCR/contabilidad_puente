@@ -471,8 +471,49 @@ export default function AccountingApp() {
   );
 
   function saveMovement(data) {
-    setMovements((prev) => [{ id: crypto.randomUUID(), ...data }, ...prev]);
+    if (editingMovement?.id) {
+      setMovements((prev) => prev.map((row) => (
+        row.id === editingMovement.id
+          ? { ...row, ...data, id: editingMovement.id }
+          : row
+      )));
+    } else {
+      setMovements((prev) => [{ id: crypto.randomUUID(), ...data }, ...prev]);
+    }
+
+    if (data.account && !institutions.some((item) => item.name === data.account)) {
+      setInstitutions((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          name: data.account,
+          type: 'Otro',
+          active: true,
+        },
+      ]);
+    }
+
+    if (data.concept && !concepts.includes(data.concept)) {
+      setConcepts((prev) => [...prev, data.concept].sort((a, b) => a.localeCompare(b, 'es')));
+    }
+
+    setEditingMovement(null);
     setModal(null);
+  }
+
+  function openNewMovement() {
+    setEditingMovement(null);
+    setModal('movement');
+  }
+
+  function openEditMovement(row) {
+    setEditingMovement(row);
+    setModal('movement');
+  }
+
+  function closeModal() {
+    setModal(null);
+    setEditingMovement(null);
   }
 
   function saveHours(data) {
@@ -492,9 +533,145 @@ export default function AccountingApp() {
     }
   }
 
+  function openStatistics(accountName = 'TODAS') {
+    setAccount(accountName || 'TODAS');
+    setConcept('TODOS');
+    setYear('TODOS');
+    setQuery('');
+    setSection('statistics');
+  }
+
+  function renameInstitution(id, nextName, nextType) {
+    const item = institutions.find((entry) => entry.id === id);
+    const cleanName = String(nextName || '').trim();
+    if (!item || !cleanName) return;
+
+    const duplicate = institutions.some(
+      (entry) => entry.id !== id && entry.name.toUpperCase() === cleanName.toUpperCase()
+    );
+    if (duplicate) {
+      alert('Ya existe una cuenta con ese nombre.');
+      return;
+    }
+
+    setInstitutions((prev) => prev.map((entry) => (
+      entry.id === id ? { ...entry, name: cleanName, type: nextType || entry.type } : entry
+    )));
+    setMovements((prev) => prev.map((row) => (
+      row.account === item.name ? { ...row, account: cleanName } : row
+    )));
+
+    if (account === item.name) setAccount(cleanName);
+  }
+
+  function addInstitution(name, type) {
+    const cleanName = String(name || '').trim();
+    if (!cleanName) return false;
+
+    if (institutions.some((entry) => entry.name.toUpperCase() === cleanName.toUpperCase())) {
+      alert('Ya existe una cuenta con ese nombre.');
+      return false;
+    }
+
+    setInstitutions((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        name: cleanName,
+        type: type || 'Otro',
+        active: true,
+      },
+    ]);
+    return true;
+  }
+
+  function deleteInstitution(id) {
+    const item = institutions.find((entry) => entry.id === id);
+    if (!item) return;
+
+    const used = movements.some((row) => row.account === item.name);
+    if (used) {
+      alert('No se puede eliminar porque existen movimientos asociados. Renombrala o reasigná primero esos movimientos.');
+      return;
+    }
+
+    if (confirm(`¿Eliminar ${item.name} de Configuración?`)) {
+      setInstitutions((prev) => prev.filter((entry) => entry.id !== id));
+    }
+  }
+
+  function renameConcept(oldName, nextName) {
+    const cleanName = String(nextName || '').trim();
+    if (!cleanName || oldName === cleanName) return true;
+
+    if (concepts.some((item) => item !== oldName && item.toUpperCase() === cleanName.toUpperCase())) {
+      alert('Ya existe un concepto con ese nombre.');
+      return false;
+    }
+
+    setConcepts((prev) => prev.map((item) => item === oldName ? cleanName : item)
+      .sort((a, b) => a.localeCompare(b, 'es')));
+    setMovements((prev) => prev.map((row) => (
+      row.concept === oldName ? { ...row, concept: cleanName } : row
+    )));
+    if (concept === oldName) setConcept(cleanName);
+    return true;
+  }
+
+  function addConcept(name) {
+    const cleanName = String(name || '').trim();
+    if (!cleanName) return false;
+
+    if (concepts.some((item) => item.toUpperCase() === cleanName.toUpperCase())) {
+      alert('Ya existe ese concepto.');
+      return false;
+    }
+
+    setConcepts((prev) => [...prev, cleanName].sort((a, b) => a.localeCompare(b, 'es')));
+    return true;
+  }
+
+  function deleteConcept(name) {
+    const used = movements.some((row) => row.concept === name);
+    if (used) {
+      alert('No se puede eliminar porque existen movimientos asociados. Podés renombrarlo desde Configuración.');
+      return;
+    }
+
+    if (confirm(`¿Eliminar el concepto "${name}"?`)) {
+      setConcepts((prev) => prev.filter((item) => item !== name));
+    }
+  }
+
   function handleImport(payload) {
-    setMovements(payload.movements || []);
-    setSaldoSnapshot(payload.saldoSnapshot || null);
+    const imported = payload.movements || [];
+    setMovements(imported);
+
+    if (payload.saldoSnapshot) {
+      setSaldoSnapshot((prev) => ({ ...prev, ...payload.saldoSnapshot }));
+    }
+
+    const importedAccounts = [...new Set(imported.map((row) => String(row.account || '').trim()).filter(Boolean))];
+    const importedConcepts = [...new Set(imported.map((row) => String(row.concept || '').trim()).filter(Boolean))];
+
+    setInstitutions((prev) => {
+      const existing = new Set(prev.map((item) => item.name.toUpperCase()));
+      return [
+        ...prev,
+        ...importedAccounts
+          .filter((name) => !existing.has(name.toUpperCase()))
+          .map((name) => ({
+            id: crypto.randomUUID(),
+            name,
+            type: 'Otro',
+            active: true,
+          })),
+      ];
+    });
+
+    setConcepts((prev) => [...new Set([...prev, ...importedConcepts])]
+      .sort((a, b) => a.localeCompare(b, 'es')));
+
     setAccount('TODAS');
     setConcept('TODOS');
     setYear('TODOS');
