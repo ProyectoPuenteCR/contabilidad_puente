@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { accounts, initialHours, initialMovements, initialSaldoSnapshot, initialInstitutions, initialInvestments } from '../lib/seed';
 import ExcelTools from './excel-tools';
 import InvestmentsPanel from './investments-panel';
@@ -228,6 +228,9 @@ function mergeHourConfiguration(configured, historicalNames, fallback) {
       id: item?.id || crypto.randomUUID(),
       name,
       active: item?.active !== false,
+      ...(Array.isArray(item?.serviceIds)
+        ? { serviceIds: [...new Set(item.serviceIds.filter(Boolean))] }
+        : {}),
     });
   }
 
@@ -245,6 +248,45 @@ function mergeHourConfiguration(configured, historicalNames, fallback) {
   }
 
   return result;
+}
+
+function mergeSpecialistServiceAssignments(specialists, services, hourRows) {
+  const serviceByName = new Map(
+    (services || []).map((item) => [
+      String(item.name || '').trim().toUpperCase(),
+      item.id,
+    ])
+  );
+
+  const assignments = new Map();
+
+  for (const row of hourRows || []) {
+    const specialistKey = String(row.specialist || '').trim().toUpperCase();
+    const serviceId = serviceByName.get(
+      String(row.service || '').trim().toUpperCase()
+    );
+
+    if (!specialistKey || !serviceId) continue;
+
+    if (!assignments.has(specialistKey)) {
+      assignments.set(specialistKey, new Set());
+    }
+
+    assignments.get(specialistKey).add(serviceId);
+  }
+
+  return (specialists || []).map((item) => {
+    const specialistKey = String(item.name || '').trim().toUpperCase();
+    const inferred = assignments.get(specialistKey) || new Set();
+    const configured = Array.isArray(item.serviceIds)
+      ? item.serviceIds
+      : [];
+
+    return {
+      ...item,
+      serviceIds: [...new Set([...configured, ...inferred])],
+    };
+  });
 }
 
 const nav = [
@@ -343,18 +385,25 @@ export default function AccountingApp({ user = null }) {
     )].sort((a, b) => a.localeCompare(b, 'es'));
 
     const cleanHours = isLegacyDemoHours(storedHours) ? [] : storedHours;
-    setMovements(cleanMovements);
-    setHours(cleanHours);
-    setHourSpecialists(mergeHourConfiguration(
-      storedHourSpecialists,
-      cleanHours.map((row) => row.specialist),
-      INITIAL_HOUR_SPECIALISTS
-    ));
-    setHourServices(mergeHourConfiguration(
+    const nextHourServices = mergeHourConfiguration(
       storedHourServices,
       cleanHours.map((row) => row.service),
       INITIAL_HOUR_SERVICES
-    ));
+    );
+    const nextHourSpecialists = mergeSpecialistServiceAssignments(
+      mergeHourConfiguration(
+        storedHourSpecialists,
+        cleanHours.map((row) => row.specialist),
+        INITIAL_HOUR_SPECIALISTS
+      ),
+      nextHourServices,
+      cleanHours
+    );
+
+    setMovements(cleanMovements);
+    setHours(cleanHours);
+    setHourSpecialists(nextHourSpecialists);
+    setHourServices(nextHourServices);
     setSaldoSnapshot({ ...initialSaldoSnapshot, ...(storedSaldoSnapshot || {}) });
     setInstitutions([...(storedInstitutions || initialInstitutions), ...autoInstitutions]);
     setInvestments(Array.isArray(storedInvestments) && storedInvestments.length ? storedInvestments : initialInvestments);
@@ -416,19 +465,26 @@ export default function AccountingApp({ user = null }) {
 
         const cloudMovements = Array.isArray(payload.movements) ? payload.movements : [];
         const cloudHours = Array.isArray(payload.hours) ? payload.hours : [];
-        setMovements(cloudMovements);
-        setYear(latestMovementYear(cloudMovements));
-        setHours(cloudHours);
-        setHourSpecialists(mergeHourConfiguration(
-          payload.hourSpecialists,
-          cloudHours.map((row) => row.specialist),
-          INITIAL_HOUR_SPECIALISTS
-        ));
-        setHourServices(mergeHourConfiguration(
+        const cloudHourServices = mergeHourConfiguration(
           payload.hourServices,
           cloudHours.map((row) => row.service),
           INITIAL_HOUR_SERVICES
-        ));
+        );
+        const cloudHourSpecialists = mergeSpecialistServiceAssignments(
+          mergeHourConfiguration(
+            payload.hourSpecialists,
+            cloudHours.map((row) => row.specialist),
+            INITIAL_HOUR_SPECIALISTS
+          ),
+          cloudHourServices,
+          cloudHours
+        );
+
+        setMovements(cloudMovements);
+        setYear(latestMovementYear(cloudMovements));
+        setHours(cloudHours);
+        setHourSpecialists(cloudHourSpecialists);
+        setHourServices(cloudHourServices);
         setSaldoSnapshot({
           ...initialSaldoSnapshot,
           ...(payload.saldoSnapshot || {}),
@@ -1023,13 +1079,24 @@ export default function AccountingApp({ user = null }) {
       );
     });
 
-    if (Array.isArray(history?.specialists) && history.specialists.length) {
-      setHourSpecialists((prev) => mergeNamedConfiguration(prev, history.specialists));
-    }
+    const importedSpecialistNames = Array.isArray(history?.specialists)
+      ? history.specialists
+      : [];
+    const importedServiceNames = Array.isArray(history?.services)
+      ? history.services
+      : [];
 
-    if (Array.isArray(history?.services) && history.services.length) {
-      setHourServices((prev) => mergeNamedConfiguration(prev, history.services));
-    }
+    setHourServices((prevServices) => {
+      const nextServices = mergeNamedConfiguration(prevServices, importedServiceNames);
+
+      setHourSpecialists((prevSpecialists) => mergeSpecialistServiceAssignments(
+        mergeNamedConfiguration(prevSpecialists, importedSpecialistNames),
+        nextServices,
+        importedHours
+      ));
+
+      return nextServices;
+    });
 
     const totalHours = importedHours.reduce(
       (sum, row) => sum + Number(row.hours || 0),
@@ -1446,7 +1513,12 @@ export default function AccountingApp({ user = null }) {
 
     setter((prev) => [
       ...prev,
-      { id: crypto.randomUUID(), name: cleanName, active: true },
+      {
+        id: crypto.randomUUID(),
+        name: cleanName,
+        active: true,
+        ...(kind === 'specialist' ? { serviceIds: [] } : {}),
+      },
     ].sort((a, b) => a.name.localeCompare(b.name, 'es')));
 
     return true;
@@ -1507,6 +1579,20 @@ export default function AccountingApp({ user = null }) {
     }
   }
 
+  function setSpecialistServices(specialistId, serviceIds) {
+    const validServiceIds = new Set(hourServices.map((item) => item.id));
+    const cleanIds = [...new Set(
+      (Array.isArray(serviceIds) ? serviceIds : [])
+        .filter((id) => validServiceIds.has(id))
+    )];
+
+    setHourSpecialists((prev) => prev.map((item) => (
+      item.id === specialistId
+        ? { ...item, serviceIds: cleanIds }
+        : item
+    )));
+  }
+
   function mergeNamedConfiguration(current, names) {
     const result = current.slice();
     const existing = new Set(result.map((item) => String(item.name || '').toUpperCase()));
@@ -1554,12 +1640,25 @@ export default function AccountingApp({ user = null }) {
       setInvestments(payload.investments);
     }
 
-    if (Array.isArray(payload.hourSpecialists) && payload.hourSpecialists.length) {
-      setHourSpecialists((prev) => mergeNamedConfiguration(prev, payload.hourSpecialists));
-    }
+    const importedSpecialistNames = Array.isArray(payload.hourSpecialists)
+      ? payload.hourSpecialists
+      : [];
+    const importedServiceNames = Array.isArray(payload.hourServices)
+      ? payload.hourServices
+      : [];
 
-    if (Array.isArray(payload.hourServices) && payload.hourServices.length) {
-      setHourServices((prev) => mergeNamedConfiguration(prev, payload.hourServices));
+    if (importedSpecialistNames.length || importedServiceNames.length || importedHours.length) {
+      setHourServices((prevServices) => {
+        const nextServices = mergeNamedConfiguration(prevServices, importedServiceNames);
+
+        setHourSpecialists((prevSpecialists) => mergeSpecialistServiceAssignments(
+          mergeNamedConfiguration(prevSpecialists, importedSpecialistNames),
+          nextServices,
+          importedHours
+        ));
+
+        return nextServices;
+      });
     }
 
     const importedAccounts = [...new Set(imported.map((row) => String(row.account || '').trim()).filter(Boolean))];
@@ -1669,19 +1768,26 @@ export default function AccountingApp({ user = null }) {
 
       const reloadedMovements = Array.isArray(payload.movements) ? payload.movements : [];
       const reloadedHours = Array.isArray(payload.hours) ? payload.hours : [];
-      setMovements(reloadedMovements);
-      setYear(latestMovementYear(reloadedMovements));
-      setHours(reloadedHours);
-      setHourSpecialists(mergeHourConfiguration(
-        payload.hourSpecialists,
-        reloadedHours.map((row) => row.specialist),
-        INITIAL_HOUR_SPECIALISTS
-      ));
-      setHourServices(mergeHourConfiguration(
+      const reloadedHourServices = mergeHourConfiguration(
         payload.hourServices,
         reloadedHours.map((row) => row.service),
         INITIAL_HOUR_SERVICES
-      ));
+      );
+      const reloadedHourSpecialists = mergeSpecialistServiceAssignments(
+        mergeHourConfiguration(
+          payload.hourSpecialists,
+          reloadedHours.map((row) => row.specialist),
+          INITIAL_HOUR_SPECIALISTS
+        ),
+        reloadedHourServices,
+        reloadedHours
+      );
+
+      setMovements(reloadedMovements);
+      setYear(latestMovementYear(reloadedMovements));
+      setHours(reloadedHours);
+      setHourSpecialists(reloadedHourSpecialists);
+      setHourServices(reloadedHourServices);
       setSaldoSnapshot({
         ...initialSaldoSnapshot,
         ...(payload.saldoSnapshot || {}),
@@ -2351,6 +2457,7 @@ export default function AccountingApp({ user = null }) {
               onRenameHourConfigItem={renameHourConfigItem}
               onToggleHourConfigItem={toggleHourConfigItem}
               onDeleteHourConfigItem={deleteHourConfigItem}
+              onSetSpecialistServices={setSpecialistServices}
             />
 
             <AuditLogCard auditLog={auditLog} />
@@ -2419,6 +2526,8 @@ export default function AccountingApp({ user = null }) {
           accountOptions={availableAccounts}
           specialistOptions={availableHourSpecialists}
           serviceOptions={availableHourServices}
+          specialistConfigs={hourSpecialists}
+          serviceConfigs={hourServices}
           initialMovement={editingMovement}
         />
       )}
@@ -3518,6 +3627,7 @@ function ConfigurationPanel({
   onRenameHourConfigItem,
   onToggleHourConfigItem,
   onDeleteHourConfigItem,
+  onSetSpecialistServices,
 }) {
   const [newInstitution, setNewInstitution] = useState({ name: '', type: 'Banco' });
   const [editingInstitution, setEditingInstitution] = useState(null);
@@ -3755,6 +3865,8 @@ function ConfigurationPanel({
         onRename={onRenameHourConfigItem}
         onToggle={onToggleHourConfigItem}
         onDelete={onDeleteHourConfigItem}
+        serviceOptions={hourServices}
+        onSetServices={onSetSpecialistServices}
       />
 
       <HourConfigCard
@@ -3888,7 +4000,11 @@ function HourConfigCard({
   onRename,
   onToggle,
   onDelete,
+  serviceOptions = [],
+  onSetServices,
 }) {
+  const [serviceEditorId, setServiceEditorId] = useState(null);
+
   return (
     <Card title={title}>
       <div className="configuration-help">{help}</div>
@@ -3909,6 +4025,7 @@ function HourConfigCard({
             <tr>
               <th>Nombre</th>
               <th>Registros de horas</th>
+              {kind === 'specialist' && <th>Servicios / Proyectos</th>}
               <th>Estado</th>
               <th>Acciones</th>
             </tr>
@@ -3918,7 +4035,8 @@ function HourConfigCard({
               const isEditing = editing?.kind === kind && editing?.id === item.id;
 
               return (
-                <tr key={item.id}>
+                <Fragment key={item.id}>
+                  <tr>
                   <td>
                     {isEditing ? (
                       <input
@@ -3933,6 +4051,29 @@ function HourConfigCard({
                     )}
                   </td>
                   <td>{number.format(usage?.[item.name] || 0)}</td>
+                  {kind === 'specialist' && (
+                    <td>
+                      <div className="specialist-services-summary">
+                        {(item.serviceIds || []).length ? (
+                          <>
+                            {(item.serviceIds || []).slice(0, 3).map((serviceId) => {
+                              const service = serviceOptions.find((entry) => entry.id === serviceId);
+                              return service ? (
+                                <span key={serviceId} className="service-chip">{service.name}</span>
+                              ) : null;
+                            })}
+                            {(item.serviceIds || []).length > 3 && (
+                              <span className="service-chip more">
+                                +{(item.serviceIds || []).length - 3}
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="config-muted">Sin servicios asignados</span>
+                        )}
+                      </div>
+                    </td>
+                  )}
                   <td>
                     <span className={item.active === false ? 'config-status off' : 'config-status on'}>
                       {item.active === false ? 'Baja' : 'Activo'}
@@ -3963,6 +4104,15 @@ function HourConfigCard({
                         </>
                       ) : (
                         <>
+                          {kind === 'specialist' && (
+                            <button
+                              type="button"
+                              className="secondary small"
+                              onClick={() => setServiceEditorId((current) => current === item.id ? null : item.id)}
+                            >
+                              Servicios ({(item.serviceIds || []).length})
+                            </button>
+                          )}
                           <button
                             type="button"
                             className="secondary small"
@@ -3993,6 +4143,44 @@ function HourConfigCard({
                     </div>
                   </td>
                 </tr>
+
+                {kind === 'specialist' && serviceEditorId === item.id && (
+                  <tr className="specialist-services-editor-row">
+                    <td colSpan={5}>
+                      <div className="specialist-services-editor">
+                        <div>
+                          <strong>Servicios / Proyectos habilitados para {item.name}</strong>
+                          <span>Podés marcar uno, dos o todos los servicios que corresponda.</span>
+                        </div>
+
+                        <div className="specialist-services-checks">
+                          {serviceOptions
+                            .filter((service) => service.active !== false)
+                            .map((service) => {
+                              const checked = (item.serviceIds || []).includes(service.id);
+
+                              return (
+                                <label key={service.id}>
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={(event) => {
+                                      const current = new Set(item.serviceIds || []);
+                                      if (event.target.checked) current.add(service.id);
+                                      else current.delete(service.id);
+                                      onSetServices?.(item.id, [...current]);
+                                    }}
+                                  />
+                                  <span>{service.name}</span>
+                                </label>
+                              );
+                            })}
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
               );
             })}
           </tbody>
@@ -4382,6 +4570,8 @@ function Modal({
   accountOptions,
   specialistOptions = [],
   serviceOptions = [],
+  specialistConfigs = [],
+  serviceConfigs = [],
   initialMovement,
 }) {
   const isHours = type === 'hours';
@@ -4419,7 +4609,44 @@ function Modal({
     notes: '',
   });
 
-  const set = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  const selectedSpecialistConfig = specialistConfigs.find(
+    (item) => item.name === form.specialist
+  );
+
+  const assignedServiceIds = Array.isArray(selectedSpecialistConfig?.serviceIds)
+    ? selectedSpecialistConfig.serviceIds
+    : [];
+
+  const servicesForSelectedSpecialist = form.specialist && assignedServiceIds.length
+    ? serviceConfigs
+        .filter((item) => item.active !== false && assignedServiceIds.includes(item.id))
+        .map((item) => item.name)
+        .sort((a, b) => a.localeCompare(b, 'es'))
+    : serviceOptions;
+
+  const set = (key, value) => setForm((current) => {
+    if (key === 'specialist') {
+      const specialist = specialistConfigs.find((item) => item.name === value);
+      const allowedIds = Array.isArray(specialist?.serviceIds)
+        ? specialist.serviceIds
+        : [];
+      const allowedNames = allowedIds.length
+        ? serviceConfigs
+            .filter((item) => item.active !== false && allowedIds.includes(item.id))
+            .map((item) => item.name)
+        : serviceOptions;
+
+      return {
+        ...current,
+        specialist: value,
+        service: allowedNames.includes(current.service)
+          ? current.service
+          : '',
+      };
+    }
+
+    return { ...current, [key]: value };
+  });
 
   function submit(event) {
     event.preventDefault();
@@ -4468,10 +4695,10 @@ function Modal({
                   {specialistOptions.map((item) => <option key={item} value={item}>{item}</option>)}
                 </select>
               </Field>
-              <Field label="Servicio / Proyecto">
+              <Field label={`Servicio / Proyecto${form.specialist && assignedServiceIds.length ? ` (${assignedServiceIds.length} habilitados)` : ''}`}>
                 <select required value={form.service} onChange={(e) => set('service', e.target.value)}>
                   <option value="">Seleccionar servicio / proyecto…</option>
-                  {serviceOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+                  {servicesForSelectedSpecialist.map((item) => <option key={item} value={item}>{item}</option>)}
                 </select>
               </Field>
               <div className="form-row">
