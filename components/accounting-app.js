@@ -10,6 +10,7 @@ import BackupTools from './backup-tools';
 import AiAnalysisPanel from './ai-analysis-panel';
 import CloudDatabasePanel from './cloud-database-panel';
 import InvoiceReader from './invoice-reader';
+import HoursHistoryImport from './hours-history-import';
 
 const money = new Intl.NumberFormat('es-AR', {
   style: 'currency',
@@ -1004,6 +1005,51 @@ export default function AccountingApp({ user = null }) {
   function closeModal() {
     setModal(null);
     setEditingMovement(null);
+  }
+
+  function importHistoricalHours(history) {
+    const importedHours = Array.isArray(history?.hours) ? history.hours : [];
+
+    if (!importedHours.length) return;
+
+    setHours((prev) => {
+      const byId = new Map(prev.map((row) => [row.id, row]));
+      for (const row of importedHours) {
+        byId.set(row.id, row);
+      }
+
+      return [...byId.values()].sort(
+        (a, b) => String(b.date || '').localeCompare(String(a.date || ''))
+      );
+    });
+
+    if (Array.isArray(history?.specialists) && history.specialists.length) {
+      setHourSpecialists((prev) => mergeNamedConfiguration(prev, history.specialists));
+    }
+
+    if (Array.isArray(history?.services) && history.services.length) {
+      setHourServices((prev) => mergeNamedConfiguration(prev, history.services));
+    }
+
+    const totalHours = importedHours.reduce(
+      (sum, row) => sum + Number(row.hours || 0),
+      0
+    );
+
+    setAuditLog((prev) => [{
+      id: crypto.randomUUID(),
+      at: new Date().toISOString(),
+      userName: user?.name || 'Usuario',
+      userEmail: user?.email || '',
+      action: 'Importación histórica de horas',
+      reason: 'Importación desde la hoja Gastos y horas del libro original.',
+      year: String(history?.year || ''),
+      affectedCount: importedHours.length,
+      totalHours,
+      sourceSheet: history?.sheetName || 'Gastos y horas',
+      hourlyRate: Number(history?.hourlyRate || 0),
+      affectedIds: importedHours.map((row) => row.id),
+    }, ...prev].slice(0, 1000));
   }
 
   function saveHours(data) {
@@ -2337,6 +2383,8 @@ export default function AccountingApp({ user = null }) {
                 tone="green"
               />
             </div>
+
+            <HoursHistoryImport onImport={importHistoricalHours} />
 
             <Card>
               <div className="table-wrap">
