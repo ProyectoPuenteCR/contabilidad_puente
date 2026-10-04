@@ -461,13 +461,13 @@ export default function AccountingApp({ user = null }) {
       .sort((a, b) => Number(b.year) - Number(a.year));
   }, [filteredWithoutYear]);
 
-  const conceptTimelineData = useMemo(() => {
+  const accountTimelineData = useMemo(() => {
     const sourceRows = year === 'TODOS' ? filteredWithoutYear : filtered;
     const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
     const validRows = sourceRows.filter((row) => /^\d{4}-\d{2}/.test(String(row.date || '')));
     if (!validRows.length) {
-      return { periods: [], concepts: [] };
+      return { periods: [], accounts: [] };
     }
 
     const sortedKeys = validRows
@@ -475,8 +475,6 @@ export default function AccountingApp({ user = null }) {
       .sort();
 
     const firstKey = year === 'TODOS' ? sortedKeys[0] : `${year}-01`;
-    // El último punto siempre es el último mes que realmente tiene datos.
-    // Evita que meses futuros en cero deformen la tendencia del ejercicio en curso.
     const lastKey = sortedKeys[sortedKeys.length - 1];
 
     const [firstYear, firstMonth] = firstKey.split('-').map(Number);
@@ -500,7 +498,7 @@ export default function AccountingApp({ user = null }) {
         income: 0,
         expense: 0,
         result: 0,
-        concepts: {},
+        accounts: {},
       });
 
       cursorMonth += 1;
@@ -511,14 +509,14 @@ export default function AccountingApp({ user = null }) {
     }
 
     const byKey = new Map(periods.map((period) => [period.key, period]));
-    const conceptTotals = new Map();
+    const accountTotals = new Map();
 
     for (const row of validRows) {
       const key = String(row.date).slice(0, 7);
       const period = byKey.get(key);
       if (!period) continue;
 
-      const conceptName = String(row.concept || 'Sin concepto').trim() || 'Sin concepto';
+      const accountName = String(row.account || 'SIN CUENTA').trim() || 'SIN CUENTA';
       const income = Number(row.income || 0);
       const expense = Number(row.expense || 0);
       const net = income - expense;
@@ -526,20 +524,26 @@ export default function AccountingApp({ user = null }) {
       period.income += income;
       period.expense += expense;
       period.result += net;
-      period.concepts[conceptName] = Number(period.concepts[conceptName] || 0) + net;
+      period.accounts[accountName] = Number(period.accounts[accountName] || 0) + net;
 
-      const current = conceptTotals.get(conceptName) || { name: conceptName, income: 0, expense: 0, net: 0, magnitude: 0 };
+      const current = accountTotals.get(accountName) || {
+        name: accountName,
+        income: 0,
+        expense: 0,
+        net: 0,
+        magnitude: 0,
+      };
       current.income += income;
       current.expense += expense;
       current.net += net;
       current.magnitude += Math.abs(income) + Math.abs(expense);
-      conceptTotals.set(conceptName, current);
+      accountTotals.set(accountName, current);
     }
 
-    const concepts = [...conceptTotals.values()]
+    const accounts = [...accountTotals.values()]
       .sort((a, b) => b.magnitude - a.magnitude);
 
-    return { periods, concepts };
+    return { periods, accounts };
   }, [year, filteredWithoutYear, filtered]);
 
   const monthlyIncomeByAccount = useMemo(() => {
@@ -1360,9 +1364,9 @@ export default function AccountingApp({ user = null }) {
               </div>
             )}
 
-            <Card title={year === 'TODOS' ? 'Evolución mensual por concepto · todos los años' : `Evolución mensual por concepto · ${year}`}>
-              <ConceptTimelineChart
-                data={conceptTimelineData}
+            <Card title={year === 'TODOS' ? 'Evolución mensual por cuenta · todos los años' : `Evolución mensual por cuenta · ${year}`}>
+              <AccountTimelineChart
+                data={accountTimelineData}
                 allYears={year === 'TODOS'}
               />
             </Card>
@@ -2163,25 +2167,33 @@ function ExpenseTable({
   );
 }
 
-function ConceptTimelineChart({ data, allYears }) {
+function AccountTimelineChart({ data, allYears }) {
   const [chartType, setChartType] = useState('lines');
   const [hiddenSeries, setHiddenSeries] = useState(() => new Set(['__income', '__expense']));
 
   const periods = data?.periods || [];
-  const concepts = data?.concepts || [];
+  const accounts = data?.accounts || [];
 
-  const colorForIndex = (index) => {
-    const hue = (index * 47 + 18) % 360;
-    return `hsl(${hue} 72% 56%)`;
+  const accountColors = {
+    'CREDICOOP': '#8bd648',
+    'MERCADO LIBRE': '#22b7d9',
+    'MERCADO LIBRE 2': '#a93b0f',
+    'EFECTIVO': '#ffe900',
+    'PREX': '#9c8d6b',
+    'PERSONAL PAY': '#efc5bd',
+  };
+
+  const colorForAccount = (name, index) => {
+    return accountColors[String(name || '').toUpperCase()] || `hsl(${(index * 47 + 18) % 360} 72% 56%)`;
   };
 
   const series = useMemo(() => {
-    const conceptSeries = concepts.map((item, index) => ({
-      key: `concept:${item.name}`,
+    const accountSeries = accounts.map((item, index) => ({
+      key: `account:${item.name}`,
       label: item.name,
-      color: colorForIndex(index),
-      type: 'concept',
-      values: periods.map((period) => Number(period.concepts?.[item.name] || 0)),
+      color: colorForAccount(item.name, index),
+      type: 'account',
+      values: periods.map((period) => Number(period.accounts?.[item.name] || 0)),
       total: Number(item.net || 0),
       magnitude: Number(item.magnitude || 0),
     }));
@@ -2218,7 +2230,7 @@ function ConceptTimelineChart({ data, allYears }) {
     const trendValues = periods.map((_, index) => logA * Math.log(index + 1) + logB);
 
     return [
-      ...conceptSeries,
+      ...accountSeries,
       {
         key: '__result',
         label: 'Resultado total',
@@ -2253,7 +2265,7 @@ function ConceptTimelineChart({ data, allYears }) {
         total: periods.reduce((sum, period) => sum + Number(period.expense || 0), 0),
       },
     ];
-  }, [concepts, periods]);
+  }, [accounts, periods]);
 
   const visibleSeries = series.filter((item) => !hiddenSeries.has(item.key));
   const visibleLineSeries = visibleSeries.filter((item) => item.type !== 'trend' || chartType === 'lines');
@@ -2291,15 +2303,15 @@ function ConceptTimelineChart({ data, allYears }) {
     setHiddenSeries(new Set());
   }
 
-  function showConceptsOnly() {
+  function showAccountsOnly() {
     setHiddenSeries(new Set(['__income', '__expense', '__result', '__trend']));
   }
 
-  const pieSeries = concepts
+  const pieSeries = accounts
     .map((item, index) => ({
-      key: `concept:${item.name}`,
+      key: `account:${item.name}`,
       label: item.name,
-      color: colorForIndex(index),
+      color: colorForAccount(item.name, index),
       value: Number(item.magnitude || 0),
     }))
     .filter((item) => item.value > 0 && !hiddenSeries.has(item.key));
@@ -2326,8 +2338,8 @@ function ConceptTimelineChart({ data, allYears }) {
           <strong>Eje mensual</strong>
           <span>
             {allYears
-              ? 'Cada punto corresponde a un mes y año; ya no se agrupan los años en un único punto.'
-              : 'Cada punto corresponde a un mes del ejercicio seleccionado.'}
+              ? 'Cada punto corresponde a un mes y año. Cada línea representa el movimiento neto mensual de una cuenta.'
+              : 'Cada punto corresponde a un mes del ejercicio. Cada línea representa Entradas − Salidas de una cuenta.'}
           </span>
         </div>
 
@@ -2342,7 +2354,7 @@ function ConceptTimelineChart({ data, allYears }) {
             </select>
           </label>
           <button type="button" className="secondary small" onClick={showAll}>Mostrar todas</button>
-          <button type="button" className="secondary small" onClick={showConceptsOnly}>Solo conceptos</button>
+          <button type="button" className="secondary small" onClick={showAccountsOnly}>Solo cuentas</button>
         </div>
       </div>
 
@@ -2376,7 +2388,7 @@ function ConceptTimelineChart({ data, allYears }) {
             viewBox={`0 0 ${width} ${height}`}
             style={{ minWidth: `${width}px` }}
             role="img"
-            aria-label="Evolución mensual de todos los conceptos"
+            aria-label="Evolución mensual de todas las cuentas"
           >
             {[0, 1, 2, 3, 4].map((step) => {
               const gy = padding.top + (plotHeight / 4) * step;
@@ -2413,7 +2425,7 @@ function ConceptTimelineChart({ data, allYears }) {
                     stroke={item.color}
                     strokeWidth={item.type === 'trend' ? 3 : item.type === 'result' ? 3.5 : 2.2}
                     strokeDasharray={item.type === 'trend' ? '10 8' : undefined}
-                    opacity={item.type === 'concept' ? 0.88 : 1}
+                    opacity={item.type === 'account' ? 0.88 : 1}
                     strokeLinejoin="round"
                     strokeLinecap="round"
                   />
@@ -2423,7 +2435,7 @@ function ConceptTimelineChart({ data, allYears }) {
                       key={`${item.key}-${periods[index]?.key}`}
                       cx={x(index)}
                       cy={y(value)}
-                      r={item.type === 'concept' ? 2.5 : 4}
+                      r={item.type === 'account' ? 2.5 : 4}
                       fill={item.color}
                       className="concept-line-point"
                     >
@@ -2457,7 +2469,7 @@ function ConceptTimelineChart({ data, allYears }) {
                     width={Math.max(1, barWidth - 0.6)}
                     height={rectHeight}
                     fill={item.color}
-                    opacity={item.type === 'concept' ? 0.82 : 1}
+                    opacity={item.type === 'account' ? 0.82 : 1}
                   >
                     <title>
                       {period.fullLabel} · {item.label}: {money.format(value)}
@@ -2502,9 +2514,9 @@ function ConceptTimelineChart({ data, allYears }) {
           </div>
 
           <div className="concept-pie-list">
-            <h4>Participación por concepto</h4>
+            <h4>Participación por cuenta</h4>
             <p>
-              La torta/dona usa el movimiento absoluto de cada concepto para que ingresos y egresos
+              La torta/dona usa el movimiento absoluto de cada cuenta para que entradas y salidas
               no se cancelen entre sí.
             </p>
             {pieSeries.map((item) => (
