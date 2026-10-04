@@ -141,19 +141,6 @@ function extractSaldoSnapshot(workbook) {
     // Únicamente valores auxiliares que siguen mostrándose en la aplicación.
     bankCash: Number(sheetValue(sheet, 'I5', 0)) || 0,
 
-    investmentPrincipalParts: [
-      Number(sheetValue(sheet, 'I9', 0)) || 0,
-      Number(sheetValue(sheet, 'J9', 0)) || 0,
-    ],
-    investmentInterestParts: [
-      Number(sheetValue(sheet, 'I10', 0)) || 0,
-      Number(sheetValue(sheet, 'J10', 0)) || 0,
-    ],
-    investmentMaturityParts: [
-      Number(sheetValue(sheet, 'I12', 0)) || 0,
-      Number(sheetValue(sheet, 'J12', 0)) || 0,
-    ],
-
     mercadoLibreCapitalization: Number(sheetValue(sheet, 'K5', 0)) || 0,
 
     currentMonth: String(sheetValue(sheet, 'C17', '') || ''),
@@ -161,6 +148,40 @@ function extractSaldoSnapshot(workbook) {
     monthIncome: Number(sheetValue(sheet, 'C19', 0)) || 0,
     salaryPayments: Number(sheetValue(sheet, 'C22', 0)) || 0,
   };
+}
+
+function extractInvestments(workbook, XLSX) {
+  const sheetName = workbook.SheetNames.find(
+    (name) => normalizeHeader(name) === 'saldo'
+  );
+  if (!sheetName) return [];
+
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet) return [];
+
+  return ['I', 'J', 'K']
+    .map((column, index) => {
+      const principal = Number(sheetValue(sheet, `${column}9`, 0)) || 0;
+      const interest = Number(sheetValue(sheet, `${column}10`, 0)) || 0;
+      const reimbursement = Number(sheetValue(sheet, `${column}12`, 0)) || 0;
+      const maturityDate = dateToIso(sheetValue(sheet, `${column}13`, ''), XLSX);
+
+      if (!principal && !interest && !reimbursement && !maturityDate) return null;
+
+      return {
+        id: `excel-pf-${index + 1}`,
+        name: `PLAZO F${index + 1}`,
+        type: 'Plazo fijo',
+        bank: 'CREDICOOP',
+        principal,
+        interest,
+        reimbursement,
+        maturityDate,
+        status: 'Vigente',
+        notes: 'Importado desde la sección Inversiones de la hoja Saldo. Ya contemplado en la base del Libro de contabilidad.',
+      };
+    })
+    .filter(Boolean);
 }
 
 function exportRows(movements) {
@@ -314,8 +335,9 @@ export default function ExcelTools({ movements, saldoSnapshot, onImport }) {
       }
 
       const snapshot = extractSaldoSnapshot(workbook);
+      const investments = extractInvestments(workbook, XLSX);
       const saldoText = snapshot
-        ? '\nTambién se encontraron los datos auxiliares de la hoja Saldo. Los importes finales serán recalculados por la web con las mismas fórmulas del Excel.'
+        ? `\nTambién se encontraron los datos auxiliares de la hoja Saldo${investments.length ? ` y ${investments.length} plazo(s) fijo(s)` : ''}.`
         : '\nNo se encontró una hoja Saldo reconocible.';
 
       const confirmText =
@@ -325,7 +347,7 @@ export default function ExcelTools({ movements, saldoSnapshot, onImport }) {
 
       if (!window.confirm(confirmText)) return;
 
-      onImport({ movements: validRows, saldoSnapshot: snapshot });
+      onImport({ movements: validRows, saldoSnapshot: snapshot, investments });
 
       window.alert(
         `Importación completada: ${validRows.length.toLocaleString('es-AR')} movimientos cargados.`
