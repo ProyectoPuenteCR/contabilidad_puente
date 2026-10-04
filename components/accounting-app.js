@@ -2046,6 +2046,12 @@ function ExpenseTable({
 }
 
 function IncomeExpenseChart({ data, periodLabel }) {
+  const [chartType, setChartType] = useState('bars');
+
+  const totalIncome = data.reduce((sum, item) => sum + Number(item.income || 0), 0);
+  const totalExpense = data.reduce((sum, item) => sum + Number(item.expense || 0), 0);
+  const result = totalIncome - totalExpense;
+
   const max = Math.max(
     1,
     ...data.flatMap((item) => [
@@ -2054,9 +2060,86 @@ function IncomeExpenseChart({ data, periodLabel }) {
     ])
   );
 
-  const totalIncome = data.reduce((sum, item) => sum + Number(item.income || 0), 0);
-  const totalExpense = data.reduce((sum, item) => sum + Number(item.expense || 0), 0);
-  const result = totalIncome - totalExpense;
+  const lineModel = useMemo(() => {
+    const width = 1000;
+    const height = 300;
+    const padding = { left: 58, right: 28, top: 26, bottom: 42 };
+    const usableWidth = width - padding.left - padding.right;
+    const usableHeight = height - padding.top - padding.bottom;
+    const count = Math.max(data.length, 1);
+
+    const results = data.map((item) =>
+      Number(item.income || 0) - Number(item.expense || 0)
+    );
+
+    let slope = 0;
+    let intercept = results[0] || 0;
+
+    if (data.length > 1) {
+      const n = data.length;
+      const sumX = data.reduce((sum, _, index) => sum + index, 0);
+      const sumY = results.reduce((sum, value) => sum + value, 0);
+      const sumXY = results.reduce((sum, value, index) => sum + index * value, 0);
+      const sumXX = data.reduce((sum, _, index) => sum + index * index, 0);
+      const denominator = n * sumXX - sumX * sumX;
+
+      if (denominator !== 0) {
+        slope = (n * sumXY - sumX * sumY) / denominator;
+        intercept = (sumY - slope * sumX) / n;
+      }
+    }
+
+    const trendValues = data.map((_, index) => intercept + slope * index);
+
+    const allValues = [
+      0,
+      ...data.map((item) => Number(item.income || 0)),
+      ...data.map((item) => Number(item.expense || 0)),
+      ...trendValues,
+    ];
+
+    const minValue = Math.min(...allValues);
+    const maxValue = Math.max(...allValues, 1);
+    const valueRange = Math.max(1, maxValue - minValue);
+
+    const x = (index) =>
+      data.length <= 1
+        ? padding.left + usableWidth / 2
+        : padding.left + (index / (count - 1)) * usableWidth;
+
+    const y = (value) =>
+      padding.top + ((maxValue - value) / valueRange) * usableHeight;
+
+    const incomePoints = data
+      .map((item, index) => `${x(index)},${y(Number(item.income || 0))}`)
+      .join(' ');
+
+    const expensePoints = data
+      .map((item, index) => `${x(index)},${y(Number(item.expense || 0))}`)
+      .join(' ');
+
+    const trendPoints = trendValues
+      .map((value, index) => `${x(index)},${y(value)}`)
+      .join(' ');
+
+    return {
+      width,
+      height,
+      padding,
+      x,
+      y,
+      incomePoints,
+      expensePoints,
+      trendPoints,
+      trendValues,
+      zeroY: y(0),
+      slope,
+    };
+  }, [data]);
+
+  const flowTotal = totalIncome + totalExpense;
+  const incomeShare = flowTotal ? (totalIncome / flowTotal) * 100 : 0;
+  const expenseShare = flowTotal ? (totalExpense / flowTotal) * 100 : 0;
 
   return (
     <div className="income-expense-chart">
@@ -2064,46 +2147,192 @@ function IncomeExpenseChart({ data, periodLabel }) {
         <div className="income-expense-legend">
           <span><i className="income-dot" />Ingresos</span>
           <span><i className="expense-dot" />Egresos</span>
+          {chartType === 'lines' && (
+            <span><i className="trend-dot" />Tendencia resultado</span>
+          )}
         </div>
 
-        <div className="income-expense-chart-summary">
-          <span>
-            Resultado del filtro
-            <strong className={result >= 0 ? 'income' : 'expense'}>
-              {money.format(result)}
-            </strong>
-          </span>
+        <div className="income-expense-chart-actions">
+          <label>
+            Tipo de gráfico
+            <select value={chartType} onChange={(event) => setChartType(event.target.value)}>
+              <option value="bars">Barras</option>
+              <option value="lines">Líneas</option>
+              <option value="pie">Torta</option>
+              <option value="donut">Dona</option>
+            </select>
+          </label>
+
+          <div className="income-expense-chart-summary">
+            <span>
+              Resultado del filtro
+              <strong className={result >= 0 ? 'income' : 'expense'}>
+                {money.format(result)}
+              </strong>
+            </span>
+          </div>
         </div>
       </div>
 
-      <div className="income-expense-plot" role="img" aria-label="Gráfico comparativo de ingresos y egresos">
-        {data.map((item) => {
-          const incomeHeight = Math.max(0, (Number(item.income || 0) / max) * 100);
-          const expenseHeight = Math.max(0, (Number(item.expense || 0) / max) * 100);
+      {chartType === 'bars' && (
+        <div className="income-expense-plot" role="img" aria-label="Gráfico de barras comparativo de ingresos y egresos">
+          {data.map((item) => {
+            const incomeHeight = Math.max(0, (Number(item.income || 0) / max) * 100);
+            const expenseHeight = Math.max(0, (Number(item.expense || 0) / max) * 100);
 
-          return (
-            <div className="income-expense-period" key={item.key}>
-              <div className="income-expense-bars">
-                <div
-                  className="income-expense-bar income-bar"
-                  style={{ height: `${incomeHeight}%` }}
-                  title={`${periodLabel} ${item.label} · Ingresos: ${money.format(item.income || 0)}`}
-                >
-                  <span>{money.format(item.income || 0)}</span>
+            return (
+              <div className="income-expense-period" key={item.key}>
+                <div className="income-expense-bars">
+                  <div
+                    className="income-expense-bar income-bar"
+                    style={{ height: `${incomeHeight}%` }}
+                    title={`${periodLabel} ${item.label} · Ingresos: ${money.format(item.income || 0)}`}
+                  >
+                    <span>{money.format(item.income || 0)}</span>
+                  </div>
+                  <div
+                    className="income-expense-bar expense-bar"
+                    style={{ height: `${expenseHeight}%` }}
+                    title={`${periodLabel} ${item.label} · Egresos: ${money.format(item.expense || 0)}`}
+                  >
+                    <span>{money.format(item.expense || 0)}</span>
+                  </div>
                 </div>
-                <div
-                  className="income-expense-bar expense-bar"
-                  style={{ height: `${expenseHeight}%` }}
-                  title={`${periodLabel} ${item.label} · Egresos: ${money.format(item.expense || 0)}`}
-                >
-                  <span>{money.format(item.expense || 0)}</span>
-                </div>
+                <strong className="income-expense-label">{item.label}</strong>
               </div>
-              <strong className="income-expense-label">{item.label}</strong>
+            );
+          })}
+        </div>
+      )}
+
+      {chartType === 'lines' && (
+        <div className="income-expense-line-wrap">
+          <svg
+            className="income-expense-line-chart"
+            viewBox={`0 0 ${lineModel.width} ${lineModel.height}`}
+            role="img"
+            aria-label="Gráfico de líneas de ingresos, egresos y tendencia del resultado"
+          >
+            {[0, 1, 2, 3, 4].map((step) => {
+              const y = lineModel.padding.top +
+                ((lineModel.height - lineModel.padding.top - lineModel.padding.bottom) / 4) * step;
+              return (
+                <line
+                  key={step}
+                  x1={lineModel.padding.left}
+                  x2={lineModel.width - lineModel.padding.right}
+                  y1={y}
+                  y2={y}
+                  className="line-grid"
+                />
+              );
+            })}
+
+            <line
+              x1={lineModel.padding.left}
+              x2={lineModel.width - lineModel.padding.right}
+              y1={lineModel.zeroY}
+              y2={lineModel.zeroY}
+              className="line-zero"
+            />
+
+            <polyline
+              points={lineModel.incomePoints}
+              className="series-line income-series"
+            />
+            <polyline
+              points={lineModel.expensePoints}
+              className="series-line expense-series"
+            />
+            <polyline
+              points={lineModel.trendPoints}
+              className="series-line trend-series"
+            />
+
+            {data.map((item, index) => (
+              <g key={item.key}>
+                <circle
+                  cx={lineModel.x(index)}
+                  cy={lineModel.y(Number(item.income || 0))}
+                  r="5"
+                  className="line-point income-point"
+                >
+                  <title>{`${item.label} · Ingresos: ${money.format(item.income || 0)}`}</title>
+                </circle>
+                <circle
+                  cx={lineModel.x(index)}
+                  cy={lineModel.y(Number(item.expense || 0))}
+                  r="5"
+                  className="line-point expense-point"
+                >
+                  <title>{`${item.label} · Egresos: ${money.format(item.expense || 0)}`}</title>
+                </circle>
+                <text
+                  x={lineModel.x(index)}
+                  y={lineModel.height - 14}
+                  className="line-axis-label"
+                  textAnchor="middle"
+                >
+                  {item.label}
+                </text>
+              </g>
+            ))}
+          </svg>
+
+          <div className="trend-explanation">
+            <strong>Tendencia del resultado neto</strong>
+            <span>
+              La línea punteada usa una regresión lineal sobre Ingresos − Egresos.
+              {lineModel.slope > 0
+                ? ' La tendencia general es ascendente.'
+                : lineModel.slope < 0
+                  ? ' La tendencia general es descendente.'
+                  : ' La tendencia general se mantiene estable.'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {(chartType === 'pie' || chartType === 'donut') && (
+        <div className="income-expense-pie-layout">
+          <div
+            className={chartType === 'donut' ? 'income-expense-pie donut' : 'income-expense-pie'}
+            style={{
+              background: `conic-gradient(#10b981 0 ${incomeShare}%, #ff4f5f ${incomeShare}% 100%)`,
+            }}
+            role="img"
+            aria-label={`Ingresos ${incomeShare.toFixed(1)}%, egresos ${expenseShare.toFixed(1)}%`}
+          >
+            {chartType === 'donut' && (
+              <div className="donut-center">
+                <small>Resultado</small>
+                <strong className={result >= 0 ? 'income' : 'expense'}>
+                  {money.format(result)}
+                </strong>
+              </div>
+            )}
+          </div>
+
+          <div className="income-expense-pie-summary">
+            <h4>
+              Participación sobre el movimiento total
+            </h4>
+            <p>
+              Para torta/dona se compara Ingresos + Egresos como flujo total del período.
+            </p>
+            <div>
+              <span><i className="income-dot" />Ingresos</span>
+              <strong>{incomeShare.toFixed(1)}%</strong>
+              <small>{money.format(totalIncome)}</small>
             </div>
-          );
-        })}
-      </div>
+            <div>
+              <span><i className="expense-dot" />Egresos</span>
+              <strong>{expenseShare.toFixed(1)}%</strong>
+              <small>{money.format(totalExpense)}</small>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="income-expense-totals">
         <div>
