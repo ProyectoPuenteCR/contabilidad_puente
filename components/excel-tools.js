@@ -134,42 +134,51 @@ function extractSaldoSnapshot(workbook) {
   const sheet = workbook.Sheets[sheetName];
   if (!sheet) return null;
 
-  const banks = [
-    ['CREDICOOP', 'C10'],
-    ['MERCADO LIBRE', 'C11'],
-    ['MERCADO LIBRE 2', 'C12'],
-    ['EFECTIVO', 'C13'],
-    ['PREX', 'C14'],
-    ['PERSONAL PAY', 'D15'],
-  ].map(([name, ref]) => ({
-    name,
-    value: Number(sheetValue(sheet, ref, 0)) || 0,
-  }));
+  const futureReceivableItems = ['G28', 'G29', 'G30']
+    .map((ref) => Number(sheetValue(sheet, ref, 0)) || 0);
 
   return {
     importedAt: new Date().toISOString(),
-    status: String(sheetValue(sheet, 'C2', '') || ''),
-    grossPlusReceivables: Number(sheetValue(sheet, 'C3', 0)) || 0,
-    grossCurrent: Number(sheetValue(sheet, 'C4', 0)) || 0,
-    available: Number(sheetValue(sheet, 'C6', 0)) || 0,
-    futureReceivables: Number(sheetValue(sheet, 'C7', 0)) || 0,
-    certification45: Number(sheetValue(sheet, 'C8', 0)) || 0,
-    banks,
+    source: 'Excel importado',
+
+    // Inputs used by the original Excel formulas.
+    bankCash: Number(sheetValue(sheet, 'I5', 0)) || 0,
+    futureReceivableItems,
+
+    certification45Items: [
+      {
+        hours: Number(sheetValue(workbook.Sheets['CONTROL DE TAREAS RRHH'], 'G11', 0)) || 0,
+        rate: Number(sheetValue(workbook.Sheets['CONTROL DE TAREAS RRHH'], 'H3', 0)) || 0,
+      },
+      {
+        hours: Number(sheetValue(workbook.Sheets['CONTROL DE TAREAS RRHH'], 'G12', 0)) || 0,
+        rate: Number(sheetValue(workbook.Sheets['CONTROL DE TAREAS RRHH'], 'H4', 0)) || 0,
+      },
+      {
+        hours: Number(sheetValue(workbook.Sheets['CONTROL DE TAREAS RRHH'], 'G13', 0)) || 0,
+        rate: Number(sheetValue(workbook.Sheets['CONTROL DE TAREAS RRHH'], 'H5', 0)) || 0,
+      },
+    ],
+
+    investmentPrincipalParts: [
+      Number(sheetValue(sheet, 'I9', 0)) || 0,
+      Number(sheetValue(sheet, 'J9', 0)) || 0,
+    ],
+    investmentInterestParts: [
+      Number(sheetValue(sheet, 'I10', 0)) || 0,
+      Number(sheetValue(sheet, 'J10', 0)) || 0,
+    ],
+    investmentMaturityParts: [
+      Number(sheetValue(sheet, 'I12', 0)) || 0,
+      Number(sheetValue(sheet, 'J12', 0)) || 0,
+    ],
+
+    mercadoLibreCapitalization: Number(sheetValue(sheet, 'K5', 0)) || 0,
+
     currentMonth: String(sheetValue(sheet, 'C17', '') || ''),
     monthExpense: Number(sheetValue(sheet, 'C18', 0)) || 0,
     monthIncome: Number(sheetValue(sheet, 'C19', 0)) || 0,
-    expenseRatio: Number(sheetValue(sheet, 'E19', 0)) || 0,
-    monthBalance: Number(sheetValue(sheet, 'C20', 0)) || 0,
-    savingMargin: Number(sheetValue(sheet, 'E20', 0)) || 0,
     salaryPayments: Number(sheetValue(sheet, 'C22', 0)) || 0,
-    bankCash: Number(sheetValue(sheet, 'I5', 0)) || 0,
-    mercadoLibreCapitalization: Number(sheetValue(sheet, 'K5', 0)) || 0,
-    investmentPrincipal:
-      (Number(sheetValue(sheet, 'I9', 0)) || 0) +
-      (Number(sheetValue(sheet, 'J9', 0)) || 0) +
-      (Number(sheetValue(sheet, 'K9', 0)) || 0),
-    investmentInterest: Number(sheetValue(sheet, 'L10', 0)) || 0,
-    investmentMaturity: Number(sheetValue(sheet, 'L12', 0)) || 0,
   };
 }
 
@@ -210,28 +219,39 @@ function exportRows(movements) {
 function snapshotRows(snapshot) {
   if (!snapshot) return [];
 
+  const futureReceivables = (snapshot.futureReceivableItems || [])
+    .reduce((sum, value) => sum + Number(value || 0), 0);
+  const certification45 = (snapshot.certification45Items || [])
+    .reduce((sum, item) => sum + Number(item?.hours || 0) * Number(item?.rate || 0), 0);
+  const investmentPrincipal = (snapshot.investmentPrincipalParts || [])
+    .reduce((sum, value) => sum + Number(value || 0), 0);
+  const investmentInterest = (snapshot.investmentInterestParts || [])
+    .reduce((sum, value) => sum + Number(value || 0), 0);
+  const investmentMaturity = (snapshot.investmentMaturityParts || [])
+    .reduce((sum, value) => sum + Number(value || 0), 0);
+  const monthExpense = Number(snapshot.monthExpense || 0);
+  const monthIncome = Number(snapshot.monthIncome || 0);
+  const monthBalance = monthIncome - monthExpense;
+  const expenseRatio = monthIncome ? monthExpense / monthIncome : 0;
+  const savingMargin = monthIncome ? 1 - expenseRatio : 0;
+
   return [
-    ['ACTUALMENTE ESTA CUENTA TIENE SALDO', snapshot.status],
-    ['SALDO BRUTO MAS ECHEQ A COBRAR', snapshot.grossPlusReceivables],
-    ['SALDO ACTUAL BRUTO total', snapshot.grossCurrent],
-    ['Dinero Disponible', snapshot.available],
-    ['Futuros cobros', snapshot.futureReceivables],
-    ['Certificación a registrar (45 D)', snapshot.certification45],
+    ['Inputs de Saldo importados', 'La web recalcula los totales con las fórmulas del Excel'],
+    ['Plata en el banco (Cash)', Number(snapshot.bankCash || 0)],
+    ['Futuros cobros', futureReceivables],
+    ['Certificación a registrar (45 D)', certification45],
     [],
-    ['Bancos', 'Valor Actual'],
-    ...(snapshot.banks || []).map((bank) => [bank.name, bank.value]),
+    ['Mes en curso', snapshot.currentMonth || ''],
+    ['Gasto de este mes', monthExpense],
+    ['Ingresos (Brutos)', monthIncome],
+    ['Saldo del mes', monthBalance],
+    ['% gasto sobre ingresos', expenseRatio],
+    ['Margen de ahorro', savingMargin],
+    ['Pagos en salarios', Number(snapshot.salaryPayments || 0)],
     [],
-    ['Mes en curso', snapshot.currentMonth],
-    ['Gasto de este mes', snapshot.monthExpense],
-    ['Ingresos (Brutos)', snapshot.monthIncome],
-    ['Saldo del mes', snapshot.monthBalance],
-    ['% gasto sobre ingresos', snapshot.expenseRatio],
-    ['Margen de ahorro', snapshot.savingMargin],
-    ['Pagos en salarios', snapshot.salaryPayments],
-    [],
-    ['Inversiones - monto invertido', snapshot.investmentPrincipal],
-    ['Inversiones - interés estimado', snapshot.investmentInterest],
-    ['Inversiones - monto a reembolsar', snapshot.investmentMaturity],
+    ['Inversiones - monto invertido', investmentPrincipal],
+    ['Inversiones - interés', investmentInterest],
+    ['Inversiones - monto a reembolsar', investmentMaturity],
   ];
 }
 
@@ -320,7 +340,7 @@ export default function ExcelTools({ movements, saldoSnapshot, onImport }) {
 
       const snapshot = extractSaldoSnapshot(workbook);
       const saldoText = snapshot
-        ? `\nTambién se encontró la hoja Saldo y se importará el Saldo actual bruto: $ ${snapshot.grossCurrent.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}.`
+        ? '\nTambién se encontraron los datos auxiliares de la hoja Saldo. Los importes finales serán recalculados por la web con las mismas fórmulas del Excel.'
         : '\nNo se encontró una hoja Saldo reconocible.';
 
       const confirmText =
