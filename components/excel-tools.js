@@ -134,31 +134,12 @@ function extractSaldoSnapshot(workbook) {
   const sheet = workbook.Sheets[sheetName];
   if (!sheet) return null;
 
-  const futureReceivableItems = ['G28', 'G29', 'G30']
-    .map((ref) => Number(sheetValue(sheet, ref, 0)) || 0);
-
   return {
     importedAt: new Date().toISOString(),
     source: 'Excel importado',
 
-    // Inputs used by the original Excel formulas.
+    // Únicamente valores auxiliares que siguen mostrándose en la aplicación.
     bankCash: Number(sheetValue(sheet, 'I5', 0)) || 0,
-    futureReceivableItems,
-
-    certification45Items: [
-      {
-        hours: Number(sheetValue(workbook.Sheets['CONTROL DE TAREAS RRHH'], 'G11', 0)) || 0,
-        rate: Number(sheetValue(workbook.Sheets['CONTROL DE TAREAS RRHH'], 'H3', 0)) || 0,
-      },
-      {
-        hours: Number(sheetValue(workbook.Sheets['CONTROL DE TAREAS RRHH'], 'G12', 0)) || 0,
-        rate: Number(sheetValue(workbook.Sheets['CONTROL DE TAREAS RRHH'], 'H4', 0)) || 0,
-      },
-      {
-        hours: Number(sheetValue(workbook.Sheets['CONTROL DE TAREAS RRHH'], 'G13', 0)) || 0,
-        rate: Number(sheetValue(workbook.Sheets['CONTROL DE TAREAS RRHH'], 'H5', 0)) || 0,
-      },
-    ],
 
     investmentPrincipalParts: [
       Number(sheetValue(sheet, 'I9', 0)) || 0,
@@ -219,10 +200,6 @@ function exportRows(movements) {
 function snapshotRows(snapshot) {
   if (!snapshot) return [];
 
-  const futureReceivables = (snapshot.futureReceivableItems || [])
-    .reduce((sum, value) => sum + Number(value || 0), 0);
-  const certification45 = (snapshot.certification45Items || [])
-    .reduce((sum, item) => sum + Number(item?.hours || 0) * Number(item?.rate || 0), 0);
   const investmentPrincipal = (snapshot.investmentPrincipalParts || [])
     .reduce((sum, value) => sum + Number(value || 0), 0);
   const investmentInterest = (snapshot.investmentInterestParts || [])
@@ -236,10 +213,8 @@ function snapshotRows(snapshot) {
   const savingMargin = monthIncome ? 1 - expenseRatio : 0;
 
   return [
-    ['Inputs de Saldo importados', 'La web recalcula los totales con las fórmulas del Excel'],
+    ['Datos auxiliares de Saldo importados'],
     ['Plata en el banco (Cash)', Number(snapshot.bankCash || 0)],
-    ['Futuros cobros', futureReceivables],
-    ['Certificación a registrar (45 D)', certification45],
     [],
     ['Mes en curso', snapshot.currentMonth || ''],
     ['Gasto de este mes', monthExpense],
@@ -412,7 +387,7 @@ export default function ExcelTools({ movements, saldoSnapshot, onImport }) {
       const info = XLSX.utils.aoa_to_sheet([
         ['Plantilla de importación - Proyecto Puente'],
         ['La aplicación busca preferentemente la hoja "Libro de contabilidad".'],
-        ['Si el archivo contiene una hoja "Saldo", también importa sus indicadores actuales.'],
+        ['Si el archivo contiene una hoja "Saldo", se importan únicamente los datos auxiliares utilizados por la aplicación.'],
         ['Campos reconocidos: FECHA, banco/Cuenta, Carpeta, Concepto, Detalle, operación n.º, Entradas (+), Salidas ( - ), Factura n y OBS.'],
         ['FECHA puede estar como fecha de Excel, DD/MM/AAAA o AAAA-MM-DD.'],
         ['Entradas y Salidas deben ser importes numéricos.'],
