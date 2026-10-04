@@ -826,197 +826,197 @@ export default function AccountingApp() {
           <>
             <Header
               title="Saldo"
-              subtitle="Estadísticas históricas del Libro de contabilidad y posición financiera actual."
+              subtitle="Posición financiera actual calculada desde el Libro de contabilidad."
             />
 
-            <section className="balance-history-section">
-              <div className="section-head-inline balance-section-heading">
-                <div>
-                  <h3>Estadísticas totales · Libro de contabilidad</h3>
-                  <p>
-                    Calculadas únicamente desde Entradas y Salidas del libro.
-                    El resultado histórico no reemplaza al saldo bancario actual.
-                  </p>
-                </div>
+            <section className="hero-balance">
+              <div>
+                <span>Saldo actual bruto total</span>
+                <strong>{money.format(saldoCalculated.grossCurrent)}</strong>
+                <small>Suma de los saldos bancarios configurados en el Libro.</small>
               </div>
-
-              <div className="grid-3 balance-total-grid">
-                <Metric
-                  label="Ingresos históricos"
-                  value={money.format(ledgerTotals.income)}
-                  tone="green"
-                />
-                <Metric
-                  label="Gastos históricos"
-                  value={money.format(ledgerTotals.expense)}
-                  tone="red"
-                />
-                <Metric
-                  label="Resultado histórico"
-                  value={money.format(ledgerTotals.result)}
-                  tone={ledgerTotals.result >= 0 ? 'green' : 'red'}
-                  hint="Entradas - Salidas"
-                />
-                <Metric
-                  label="Movimientos históricos"
-                  value={number.format(ledgerTotals.count)}
-                  tone="blue"
-                />
-                <Metric
-                  label="Gasto sobre ingresos"
-                  value={percent.format(ledgerTotals.expenseRatio || 0)}
-                  tone="amber"
-                />
-                <Metric
-                  label="Margen histórico"
-                  value={percent.format(ledgerTotals.savingMargin || 0)}
-                  tone={ledgerTotals.savingMargin >= 0 ? 'green' : 'red'}
-                />
-              </div>
-
-              <Card title="Estadísticas anuales del Libro de contabilidad">
-                <div className="table-wrap">
-                  <table className="annual-balance-table">
-                    <thead>
-                      <tr>
-                        <th>Año</th>
-                        <th>Ingresos</th>
-                        <th>Gastos</th>
-                        <th>Resultado</th>
-                        <th>Gasto / ingresos</th>
-                        <th>Margen</th>
-                        <th>Movimientos</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {ledgerAnnualStats.map((item) => (
-                        <tr key={item.year}>
-                          <td><strong>{item.year}</strong></td>
-                          <td className="income money-cell">{money.format(item.income)}</td>
-                          <td className="expense money-cell">{money.format(item.expense)}</td>
-                          <td className={`money-cell ${item.result >= 0 ? 'income' : 'expense'}`}>
-                            {money.format(item.result)}
-                          </td>
-                          <td className="money-cell">{percent.format(item.expenseRatio || 0)}</td>
-                          <td className={`money-cell ${item.savingMargin >= 0 ? 'income' : 'expense'}`}>
-                            {percent.format(item.savingMargin || 0)}
-                          </td>
-                          <td className="money-cell">{number.format(item.count)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr>
-                        <td><strong>TOTAL</strong></td>
-                        <td className="income money-cell">{money.format(ledgerTotals.income)}</td>
-                        <td className="expense money-cell">{money.format(ledgerTotals.expense)}</td>
-                        <td className={`money-cell ${ledgerTotals.result >= 0 ? 'income' : 'expense'}`}>
-                          {money.format(ledgerTotals.result)}
-                        </td>
-                        <td className="money-cell">{percent.format(ledgerTotals.expenseRatio || 0)}</td>
-                        <td className={`money-cell ${ledgerTotals.savingMargin >= 0 ? 'income' : 'expense'}`}>
-                          {percent.format(ledgerTotals.savingMargin || 0)}
-                        </td>
-                        <td className="money-cell">{number.format(ledgerTotals.count)}</td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              </Card>
+              <div className="hero-icon">▰</div>
             </section>
 
-            <div className="section-head-inline balance-current-heading">
-              <div>
-                <h3>Posición financiera actual</h3>
-                <p>Valores importados de la hoja Saldo del Excel original.</p>
-              </div>
+            <div className="grid-2">
+              <Metric
+                label="Saldo actual bruto total"
+                value={money.format(saldoCalculated.grossCurrent)}
+                tone="blue"
+              />
+              <Metric
+                label="Dinero disponible"
+                value={money.format(saldoCalculated.available)}
+                tone="green"
+              />
             </div>
 
-            <>
-              <section className="hero-balance">
-                <div>
-                  <span>Saldo actual bruto total</span>
-                  <strong>{money.format(saldoCalculated.grossCurrent)}</strong>
-                  <small>Calculado desde el Libro de contabilidad · misma fórmula de Excel C4</small>
-                </div>
-                <div className="hero-icon">▰</div>
-              </section>
-
-              <div className="grid-4">
-                <Metric
-                  label="Saldo bruto + eCheq a cobrar"
-                  value={money.format(saldoCalculated.grossPlusReceivables)}
-                  tone="blue"
-                />
-                <Metric
-                  label="Dinero disponible"
-                  value={money.format(saldoCalculated.available)}
-                  tone="green"
-                />
-                <Metric
-                  label="Futuros cobros"
-                  value={money.format(saldoCalculated.futureReceivables)}
-                  tone="amber"
-                />
-                <Metric
-                  label="Certificación a registrar (45 D)"
-                  value={money.format(saldoCalculated.certification45)}
-                  tone="blue"
-                />
-              </div>
-
-              <div className="grid-2">
-                <Card title="Bancos · igual que hoja Saldo">
-                  <div className="saldo-bank-table">
-                    <div className="saldo-bank-head">
-                      <span>Banco</span>
-                      <span>Valor Actual</span>
-                      <span>Cálculo</span>
-                      <span>Balance</span>
-                    </div>
-                    {saldoCalculated.bankRows.map((bank) => (
-                      <div className="saldo-bank-row" key={bank.name}>
+            <div className="grid-2">
+              <Card title="Cuentas · valor actual">
+                <div className="saldo-bank-table">
+                  <div className="saldo-bank-head">
+                    <span>Cuenta</span>
+                    <span>Tipo</span>
+                    <span>Valor actual</span>
+                    <span>Resumen</span>
+                  </div>
+                  {saldoCalculated.bankRows.map((bank) => {
+                    const configured = institutions.find((item) => item.name === bank.name);
+                    return (
+                      <button
+                        type="button"
+                        className="saldo-bank-row saldo-bank-row-button"
+                        key={bank.name}
+                        onClick={() => openStatistics(bank.name)}
+                      >
                         <strong>{bank.name}</strong>
+                        <span>{configured?.type || 'Sin clasificar'}</span>
                         <span>{bank.value == null ? '' : money.format(bank.value)}</span>
-                        <span>{money.format(bank.calculation)}</span>
-                        <span className={Math.abs(bank.balance) < 0.005 ? 'balance-ok' : 'balance-review'}>
-                          {money.format(bank.balance)}
-                        </span>
-                      </div>
+                        <span className="balance-ok">Ver estadísticas →</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </Card>
+
+              <Card title={`Mes en curso · ${saldoCalculated.currentMonth || '-'}`}>
+                <div className="balance-list">
+                  <div><span>Gasto de este mes</span><strong className="expense">{money.format(saldoCalculated.monthExpense)}</strong></div>
+                  <div><span>Ingresos brutos</span><strong className="income">{money.format(saldoCalculated.monthIncome)}</strong></div>
+                  <div><span>Saldo del mes</span><strong>{money.format(saldoCalculated.monthBalance)}</strong></div>
+                  <div><span>Gasto sobre ingresos</span><strong>{percent.format(saldoCalculated.expenseRatio || 0)}</strong></div>
+                  <div><span>Margen de ahorro</span><strong>{percent.format(saldoCalculated.savingMargin || 0)}</strong></div>
+                  <div><span>Pagos en salarios</span><strong>{money.format(saldoCalculated.salaryPayments)}</strong></div>
+                </div>
+              </Card>
+            </div>
+
+            <div className="grid-3">
+              <Metric
+                label="Monto invertido"
+                value={money.format(saldoCalculated.investmentPrincipal || 0)}
+                tone="blue"
+              />
+              <Metric
+                label="Interés estimado"
+                value={money.format(saldoCalculated.investmentInterest || 0)}
+                tone="green"
+              />
+              <Metric
+                label="Monto a reembolsar"
+                value={money.format(saldoCalculated.investmentMaturity || 0)}
+                tone="amber"
+              />
+            </div>
+          </>
+        )}
+
+        {section === 'statistics' && (
+          <>
+            <Header
+              title="Estadísticas"
+              subtitle={account === 'TODAS'
+                ? 'Análisis del Libro de contabilidad por año, cuenta y concepto.'
+                : `Resumen de ${account} · podés cambiar los filtros cuando quieras.`}
+            />
+
+            <Filters
+              query={query}
+              setQuery={setQuery}
+              account={account}
+              setAccount={setAccount}
+              accountOptions={availableAccounts}
+              concept={concept}
+              setConcept={setConcept}
+              conceptOptions={availableConcepts}
+              year={year}
+              setYear={setYear}
+              yearOptions={availableYears}
+              compact={compact}
+              setCompact={setCompact}
+              showColumnReset={false}
+            />
+
+            <div className="grid-4">
+              <Metric
+                label={year === 'TODOS' ? 'Ingresos del filtro' : `Ingresos · ${year}`}
+                value={money.format(filteredTotals.income)}
+                tone="green"
+              />
+              <Metric
+                label={year === 'TODOS' ? 'Gastos del filtro' : `Gastos · ${year}`}
+                value={money.format(filteredTotals.expense)}
+                tone="red"
+              />
+              <Metric
+                label="Resultado"
+                value={money.format(filteredTotals.income - filteredTotals.expense)}
+                tone={(filteredTotals.income - filteredTotals.expense) >= 0 ? 'green' : 'red'}
+              />
+              <Metric
+                label="Movimientos"
+                value={number.format(filteredTotals.count)}
+                tone="blue"
+              />
+            </div>
+
+            <Card title="Evolución anual">
+              <div className="table-wrap">
+                <table className="annual-balance-table">
+                  <thead>
+                    <tr>
+                      <th>Año</th>
+                      <th>Ingresos</th>
+                      <th>Gastos</th>
+                      <th>Resultado</th>
+                      <th>Movimientos</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {yearlyStats.map((item) => (
+                      <tr key={item.year}>
+                        <td><strong>{item.year}</strong></td>
+                        <td className="income money-cell">{money.format(item.income)}</td>
+                        <td className="expense money-cell">{money.format(item.expense)}</td>
+                        <td className={`money-cell ${item.result >= 0 ? 'income' : 'expense'}`}>
+                          {money.format(item.result)}
+                        </td>
+                        <td className="money-cell">{number.format(item.count)}</td>
+                      </tr>
                     ))}
-                  </div>
-                </Card>
-
-                <Card title={`Mes en curso · ${saldoCalculated.currentMonth || '-'}`}>
-                  <div className="balance-list">
-                    <div><span>Gasto de este mes</span><strong className="expense">{money.format(saldoCalculated.monthExpense)}</strong></div>
-                    <div><span>Ingresos brutos</span><strong className="income">{money.format(saldoCalculated.monthIncome)}</strong></div>
-                    <div><span>Saldo del mes</span><strong>{money.format(saldoCalculated.monthBalance)}</strong></div>
-                    <div><span>Gasto sobre ingresos</span><strong>{percent.format(saldoCalculated.expenseRatio || 0)}</strong></div>
-                    <div><span>Margen de ahorro</span><strong>{percent.format(saldoCalculated.savingMargin || 0)}</strong></div>
-                    <div><span>Pagos en salarios</span><strong>{money.format(saldoCalculated.salaryPayments)}</strong></div>
-                  </div>
-                </Card>
+                  </tbody>
+                </table>
               </div>
+            </Card>
 
-              <div className="grid-3">
-                <Metric
-                  label="Monto invertido"
-                  value={money.format(saldoCalculated.investmentPrincipal || 0)}
-                  tone="blue"
-                />
-                <Metric
-                  label="Interés estimado"
-                  value={money.format(saldoCalculated.investmentInterest || 0)}
-                  tone="green"
-                />
-                <Metric
-                  label="Monto a reembolsar"
-                  value={money.format(saldoCalculated.investmentMaturity || 0)}
-                  tone="amber"
-                />
+            <Card title="Resumen por concepto">
+              <div className="table-wrap">
+                <table className="statistics-concept-table">
+                  <thead>
+                    <tr>
+                      <th>Concepto</th>
+                      <th>Ingresos</th>
+                      <th>Gastos</th>
+                      <th>Resultado</th>
+                      <th>Movimientos</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {statisticsConcepts.map((item) => (
+                      <tr key={item.concept}>
+                        <td>{item.concept}</td>
+                        <td className="income money-cell">{money.format(item.income)}</td>
+                        <td className="expense money-cell">{money.format(item.expense)}</td>
+                        <td className={`money-cell ${item.result >= 0 ? 'income' : 'expense'}`}>
+                          {money.format(item.result)}
+                        </td>
+                        <td className="money-cell">{number.format(item.count)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            </>
+            </Card>
           </>
         )}
 
