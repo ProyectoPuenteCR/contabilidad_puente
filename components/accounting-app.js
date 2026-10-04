@@ -1048,7 +1048,7 @@ export default function AccountingApp() {
 
             <div className="grid-4">
               <Metric
-                label={year === 'TODOS' ? 'Gastos · todos los años' : `Gastos · ${year}`}
+                label={year === 'TODOS' ? 'Total de gastos filtrados' : `Gastos · ${year}`}
                 value={money.format(expenseTotal)}
                 tone="red"
               />
@@ -1098,7 +1098,7 @@ export default function AccountingApp() {
             )}
 
             <div className="grid-2">
-              <Card title={year === 'TODOS' ? 'Gastos por concepto · todos los años' : `Gastos por concepto · ${year}`}>
+              <Card title={year === 'TODOS' ? 'Gastos por concepto · período filtrado' : `Gastos por concepto · ${year}`}>
                 <Bars data={categoryExpenses} />
               </Card>
 
@@ -1240,9 +1240,14 @@ function Header({ title, subtitle, action, onAction }) {
   );
 }
 
-function Metric({ label, value, tone, hint }) {
+function Metric({ label, value, tone, hint, onClick }) {
+  const Tag = onClick ? 'button' : 'div';
   return (
-    <div className="metric">
+    <Tag
+      className={onClick ? 'metric metric-clickable' : 'metric'}
+      onClick={onClick}
+      type={onClick ? 'button' : undefined}
+    >
       <span className={'metric-icon ' + tone}>
         {tone === 'green' ? '↗' : tone === 'red' ? '↘' : tone === 'amber' ? '◇' : '▣'}
       </span>
@@ -1251,7 +1256,7 @@ function Metric({ label, value, tone, hint }) {
         <strong>{value}</strong>
         {hint && <em>{hint}</em>}
       </div>
-    </div>
+    </Tag>
   );
 }
 
@@ -1318,6 +1323,7 @@ function LedgerTable({
   columnWidths,
   setColumnWidths,
   onDelete,
+  onEdit,
   showFilteredTotals = false,
   filteredLabel = '',
   totals = { income: 0, expense: 0 },
@@ -1394,7 +1400,7 @@ function LedgerTable({
 
         <tbody>
           {rows.map((m) => (
-            <tr key={m.id}>
+            <tr key={m.id} className="editable-ledger-row" onClick={() => onEdit?.(m)} title="Clic para editar">
               <td>{formatDate(m.date)}</td>
               <td><span className="pill blue">{m.account}</span></td>
               <td className="truncate-cell" title={m.folder}>{m.folder}</td>
@@ -1404,7 +1410,7 @@ function LedgerTable({
               <td className="income money-cell">{m.income ? money.format(m.income) : '-'}</td>
               <td className="expense money-cell">{m.expense ? money.format(m.expense) : '-'}</td>
               <td className="truncate-cell" title={m.invoice}>{m.invoice || '-'}</td>
-              <td><button className="icon-btn danger" onClick={() => onDelete(m.id)}>×</button></td>
+              <td><button className="icon-btn danger" onClick={(event) => { event.stopPropagation(); onDelete(m.id); }}>×</button></td>
             </tr>
           ))}
         </tbody>
@@ -1448,9 +1454,10 @@ function Bars({ data }) {
   );
 }
 
-function Modal({ type, onClose, onMovement, onHours, conceptOptions, accountOptions }) {
+function Modal({ type, onClose, onMovement, onHours, conceptOptions, accountOptions, initialMovement }) {
   const isHours = type === 'hours';
   const isExpense = type === 'expense';
+  const isEditingMovement = !isHours && !isExpense && Boolean(initialMovement?.id);
 
   const [form, setForm] = useState(isHours ? {
     date: new Date().toISOString().slice(0, 10),
@@ -1459,6 +1466,17 @@ function Modal({ type, onClose, onMovement, onHours, conceptOptions, accountOpti
     hours: '',
     hourlyRate: '',
     notes: '',
+  } : initialMovement ? {
+    date: initialMovement.date || new Date().toISOString().slice(0, 10),
+    account: initialMovement.account || accountOptions[0] || 'CREDICOOP',
+    folder: initialMovement.folder || '',
+    concept: initialMovement.concept || '',
+    detail: initialMovement.detail || '',
+    operation: initialMovement.operation || '',
+    income: initialMovement.income || '',
+    expense: initialMovement.expense || '',
+    invoice: initialMovement.invoice || '',
+    notes: initialMovement.notes || '',
   } : {
     date: new Date().toISOString().slice(0, 10),
     account: accountOptions[0] || 'CREDICOOP',
@@ -1505,8 +1523,8 @@ function Modal({ type, onClose, onMovement, onHours, conceptOptions, accountOpti
       <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <div>
-            <h2>{isHours ? 'Registrar horas' : isExpense ? 'Nuevo gasto' : 'Nuevo movimiento'}</h2>
-            <p>Complete los datos del registro.</p>
+            <h2>{isHours ? 'Registrar horas' : isExpense ? 'Nuevo gasto' : isEditingMovement ? 'Editar movimiento' : 'Nuevo movimiento'}</h2>
+            <p>{isEditingMovement ? 'Modificá el registro y guardá los cambios.' : 'Complete los datos del registro.'}</p>
           </div>
           <button className="icon-btn" onClick={onClose}>×</button>
         </div>
