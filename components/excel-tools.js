@@ -20,10 +20,12 @@ function pick(row, aliases) {
   const normalized = new Map(
     Object.entries(row).map(([key, value]) => [normalizeHeader(key), value])
   );
+
   for (const alias of aliases) {
     const key = normalizeHeader(alias);
     if (normalized.has(key)) return normalized.get(key);
   }
+
   return '';
 }
 
@@ -82,14 +84,6 @@ function dateToIso(value, XLSX) {
     return `${String(year).padStart(4,'0')}-${String(latam[2]).padStart(2,'0')}-${String(latam[1]).padStart(2,'0')}`;
   }
 
-  const parsed = new Date(text);
-  if (!Number.isNaN(parsed.getTime())) {
-    const y = parsed.getFullYear();
-    const m = String(parsed.getMonth() + 1).padStart(2, '0');
-    const d = String(parsed.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  }
-
   return '';
 }
 
@@ -122,6 +116,60 @@ function movementFromRow(row, XLSX) {
     expense,
     invoice,
     notes,
+  };
+}
+
+function sheetValue(sheet, ref, fallback = null) {
+  const value = sheet?.[ref]?.v;
+  return value === undefined || value === null || value === '' ? fallback : value;
+}
+
+function extractSaldoSnapshot(workbook) {
+  const sheetName = workbook.SheetNames.find(
+    (name) => normalizeHeader(name) === 'saldo'
+  );
+
+  if (!sheetName) return null;
+
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet) return null;
+
+  const banks = [
+    ['CREDICOOP', 'C10'],
+    ['MERCADO LIBRE', 'C11'],
+    ['MERCADO LIBRE 2', 'C12'],
+    ['EFECTIVO', 'C13'],
+    ['PREX', 'C14'],
+    ['PERSONAL PAY', 'D15'],
+  ].map(([name, ref]) => ({
+    name,
+    value: Number(sheetValue(sheet, ref, 0)) || 0,
+  }));
+
+  return {
+    importedAt: new Date().toISOString(),
+    status: String(sheetValue(sheet, 'C2', '') || ''),
+    grossPlusReceivables: Number(sheetValue(sheet, 'C3', 0)) || 0,
+    grossCurrent: Number(sheetValue(sheet, 'C4', 0)) || 0,
+    available: Number(sheetValue(sheet, 'C6', 0)) || 0,
+    futureReceivables: Number(sheetValue(sheet, 'C7', 0)) || 0,
+    certification45: Number(sheetValue(sheet, 'C8', 0)) || 0,
+    banks,
+    currentMonth: String(sheetValue(sheet, 'C17', '') || ''),
+    monthExpense: Number(sheetValue(sheet, 'C18', 0)) || 0,
+    monthIncome: Number(sheetValue(sheet, 'C19', 0)) || 0,
+    expenseRatio: Number(sheetValue(sheet, 'E19', 0)) || 0,
+    monthBalance: Number(sheetValue(sheet, 'C20', 0)) || 0,
+    savingMargin: Number(sheetValue(sheet, 'E20', 0)) || 0,
+    salaryPayments: Number(sheetValue(sheet, 'C22', 0)) || 0,
+    bankCash: Number(sheetValue(sheet, 'I5', 0)) || 0,
+    mercadoLibreCapitalization: Number(sheetValue(sheet, 'K5', 0)) || 0,
+    investmentPrincipal:
+      (Number(sheetValue(sheet, 'I9', 0)) || 0) +
+      (Number(sheetValue(sheet, 'J9', 0)) || 0) +
+      (Number(sheetValue(sheet, 'K9', 0)) || 0),
+    investmentInterest: Number(sheetValue(sheet, 'L10', 0)) || 0,
+    investmentMaturity: Number(sheetValue(sheet, 'L12', 0)) || 0,
   };
 }
 
@@ -159,6 +207,34 @@ function exportRows(movements) {
     });
 }
 
+function snapshotRows(snapshot) {
+  if (!snapshot) return [];
+
+  return [
+    ['ACTUALMENTE ESTA CUENTA TIENE SALDO', snapshot.status],
+    ['SALDO BRUTO MAS ECHEQ A COBRAR', snapshot.grossPlusReceivables],
+    ['SALDO ACTUAL BRUTO total', snapshot.grossCurrent],
+    ['Dinero Disponible', snapshot.available],
+    ['Futuros cobros', snapshot.futureReceivables],
+    ['Certificación a registrar (45 D)', snapshot.certification45],
+    [],
+    ['Bancos', 'Valor Actual'],
+    ...(snapshot.banks || []).map((bank) => [bank.name, bank.value]),
+    [],
+    ['Mes en curso', snapshot.currentMonth],
+    ['Gasto de este mes', snapshot.monthExpense],
+    ['Ingresos (Brutos)', snapshot.monthIncome],
+    ['Saldo del mes', snapshot.monthBalance],
+    ['% gasto sobre ingresos', snapshot.expenseRatio],
+    ['Margen de ahorro', snapshot.savingMargin],
+    ['Pagos en salarios', snapshot.salaryPayments],
+    [],
+    ['Inversiones - monto invertido', snapshot.investmentPrincipal],
+    ['Inversiones - interés estimado', snapshot.investmentInterest],
+    ['Inversiones - monto a reembolsar', snapshot.investmentMaturity],
+  ];
+}
+
 function makeTemplateRows() {
   return [
     {
@@ -176,21 +252,6 @@ function makeTemplateRows() {
       'Factura n': 'FC-0001',
       OBS: 'Fila de ejemplo',
     },
-    {
-      Mes: 'Octubre',
-      año: 2026,
-      banco: 'MERCADO LIBRE',
-      Carpeta: 'Administración',
-      FECHA: '2026-10-02',
-      Concepto: 'SERVICIOS',
-      Detalle: 'Ejemplo de egreso',
-      'operación n.º': 'OP-0002',
-      'Entradas (+)': '',
-      'Salidas ( - )': 25000,
-      SALDO: 125000,
-      'Factura n': '',
-      OBS: 'Fila de ejemplo',
-    },
   ];
 }
 
@@ -201,9 +262,24 @@ function styleSheet(sheet) {
     { wch: 16 }, { wch: 18 }, { wch: 32 },
   ];
   sheet['!autofilter'] = { ref: sheet['!ref'] };
+
+  const range = sheet['!ref'];
+  if (!range) return;
+
+  const match = range.match(/:([A-Z]+)(\d+)$/);
+  const lastRow = match ? Number(match[2]) : 0;
+
+  for (const col of ['I', 'J', 'K']) {
+    for (let row = 2; row <= lastRow; row += 1) {
+      const cell = sheet[`${col}${row}`];
+      if (cell && typeof cell.v === 'number') {
+        cell.z = '$ #,##0.00;[Red]($ #,##0.00);-';
+      }
+    }
+  }
 }
 
-export default function ExcelTools({ movements, onImport }) {
+export default function ExcelTools({ movements, saldoSnapshot, onImport }) {
   const inputRef = useRef(null);
   const [busy, setBusy] = useState(false);
 
@@ -242,13 +318,20 @@ export default function ExcelTools({ movements, onImport }) {
         throw new Error('El archivo no contiene movimientos reconocibles.');
       }
 
+      const snapshot = extractSaldoSnapshot(workbook);
+      const saldoText = snapshot
+        ? `\nTambién se encontró la hoja Saldo y se importará el Saldo actual bruto: $ ${snapshot.grossCurrent.toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}.`
+        : '\nNo se encontró una hoja Saldo reconocible.';
+
       const confirmText =
-        `Se encontraron ${validRows.length.toLocaleString('es-AR')} movimientos en la hoja "${sheetName}".\n\n` +
-        'Aceptar reemplazará los movimientos actualmente guardados en este navegador.';
+        `Se encontraron ${validRows.length.toLocaleString('es-AR')} movimientos en la hoja "${sheetName}".` +
+        saldoText +
+        '\n\nAceptar reemplazará los datos actualmente guardados en este navegador.';
 
       if (!window.confirm(confirmText)) return;
 
-      onImport(validRows);
+      onImport({ movements: validRows, saldoSnapshot: snapshot });
+
       window.alert(
         `Importación completada: ${validRows.length.toLocaleString('es-AR')} movimientos cargados.`
       );
@@ -276,6 +359,13 @@ export default function ExcelTools({ movements, onImport }) {
 
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, sheet, 'Libro de contabilidad');
+
+      if (saldoSnapshot) {
+        const saldoSheet = XLSX.utils.aoa_to_sheet(snapshotRows(saldoSnapshot));
+        saldoSheet['!cols'] = [{ wch: 42 }, { wch: 24 }];
+        XLSX.utils.book_append_sheet(workbook, saldoSheet, 'Saldo');
+      }
+
       XLSX.writeFile(workbook, 'Libro_contabilidad_Puente_export.xlsx', {
         compression: true,
       });
@@ -302,11 +392,10 @@ export default function ExcelTools({ movements, onImport }) {
       const info = XLSX.utils.aoa_to_sheet([
         ['Plantilla de importación - Proyecto Puente'],
         ['La aplicación busca preferentemente la hoja "Libro de contabilidad".'],
-        ['Campos principales reconocidos: FECHA, banco/Cuenta, Carpeta, Concepto, Detalle, operación n.º, Entradas (+), Salidas ( - ), Factura n y OBS.'],
+        ['Si el archivo contiene una hoja "Saldo", también importa sus indicadores actuales.'],
+        ['Campos reconocidos: FECHA, banco/Cuenta, Carpeta, Concepto, Detalle, operación n.º, Entradas (+), Salidas ( - ), Factura n y OBS.'],
         ['FECHA puede estar como fecha de Excel, DD/MM/AAAA o AAAA-MM-DD.'],
         ['Entradas y Salidas deben ser importes numéricos.'],
-        ['SALDO, Mes y año son opcionales para la importación.'],
-        ['Al importar, la aplicación muestra la cantidad detectada antes de reemplazar los movimientos actuales.'],
       ]);
       info['!cols'] = [{ wch: 120 }];
 
