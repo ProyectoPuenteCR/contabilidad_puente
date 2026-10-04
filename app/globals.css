@@ -136,3 +136,41 @@
   .pp-login-access h2{font-size:38px}
   .pp-login-access-footer{flex-direction:column;gap:5px}
 }
+
+
+/* --- Resumen de Saldo en Libro de contabilidad --- */
+.book-main-metrics{margin-bottom:12px}
+.book-balance-labels{display:grid;grid-template-columns:repeat(3,minmax(220px,1fr));gap:10px;margin:0 0 16px}
+.finance-label{display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:52px;padding:10px 13px;border:1px solid var(--border);border-radius:10px;background:var(--panel);box-shadow:0 3px 12px #15263b08}
+.finance-label-wide{grid-column:span 1}
+.finance-label span{color:var(--muted);font-size:11px;font-weight:700}
+.finance-label strong{font-size:14px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.bank-labels{grid-column:1/-1;display:grid;grid-template-columns:repeat(6,minmax(145px,1fr));gap:8px}
+.bank-label{display:flex;flex-direction:column;gap:5px;min-width:0;padding:10px 12px;border-radius:9px;border:1px solid transparent}
+.bank-label span{font-size:10px;font-weight:850;letter-spacing:.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bank-label strong{font-size:13px;font-weight:850;white-space:nowrap;font-variant-numeric:tabular-nums}
+.bank-credicoop{background:#8ed34e;color:#10210a;border-color:#79bd3d}
+.bank-mercado-libre{background:#16b9e6;color:#042431;border-color:#0ca6cf}
+.bank-mercado-libre-2{background:#96320d;color:#fff;border-color:#7e290a}
+.bank-efectivo{background:#f4ef17;color:#222500;border-color:#d8d20d}
+.bank-prex{background:#8e8060;color:#fff;border-color:#776b50}
+.bank-personal-pay{background:#f3c9c2;color:#4b1d17;border-color:#dfb1a8}
+.book-saldo-warning{margin-top:0}
+.dark .finance-label{background:var(--panel)}
+.dark .bank-credicoop{color:#0e2108}
+.dark .bank-mercado-libre{color:#06202b}
+.dark .bank-efectivo{color:#1e2100}
+
+@media(max-width:1350px){
+  .bank-labels{grid-template-columns:repeat(3,minmax(160px,1fr))}
+}
+@media(max-width:1100px){
+  .book-balance-labels{grid-template-columns:1fr}
+  .finance-label-wide{grid-column:auto}
+}
+@media(max-width:680px){
+  .book-balance-labels{grid-template-columns:1fr}
+  .finance-label{align-items:flex-start;flex-direction:column;gap:4px}
+  .bank-labels{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .bank-label strong{font-size:11px}
+}
