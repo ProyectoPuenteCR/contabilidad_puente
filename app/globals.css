@@ -212,3 +212,113 @@
   .saldo-bank-table{overflow-x:auto}
   .saldo-bank-head,.saldo-bank-row{min-width:640px}
 }
+
+
+/* --- Navegación, estadísticas y configuración --- */
+.metric-clickable{
+  width:100%;
+  text-align:left;
+  color:inherit;
+  font:inherit;
+  cursor:pointer;
+}
+.metric-clickable:hover{
+  border-color:#79aef0;
+  transform:translateY(-1px);
+  box-shadow:0 8px 22px #1a4f8a12;
+}
+.bank-label-button{
+  appearance:none;
+  width:100%;
+  text-align:left;
+  cursor:pointer;
+  font:inherit;
+}
+.bank-label-button:hover{
+  transform:translateY(-1px);
+  box-shadow:0 7px 16px #0000001c;
+  filter:brightness(1.02);
+}
+.editable-ledger-row{cursor:pointer}
+.editable-ledger-row:hover td{
+  background:color-mix(in srgb,var(--panel) 90%,var(--blue) 10%);
+}
+.statistics-concept-table{min-width:760px}
+.saldo-bank-row-button{
+  appearance:none;
+  width:100%;
+  border:0;
+  border-bottom:1px solid var(--border);
+  background:transparent;
+  color:var(--text);
+  font:inherit;
+  text-align:left;
+  cursor:pointer;
+}
+.saldo-bank-row-button:hover{
+  background:color-mix(in srgb,var(--panel) 90%,var(--blue) 10%);
+}
+.saldo-bank-row-button:last-child{border-bottom:0}
+
+.configuration-layout{display:grid;gap:18px}
+.configuration-help{
+  padding:13px 16px;
+  border-bottom:1px solid var(--border);
+  color:var(--muted);
+  font-size:11px;
+  line-height:1.55;
+}
+.config-add-form{
+  display:grid;
+  grid-template-columns:minmax(240px,1fr) 190px auto;
+  gap:10px;
+  align-items:center;
+  padding:14px 16px;
+  border-bottom:1px solid var(--border);
+}
+.config-add-form input,
+.config-add-form select,
+.configuration-table input,
+.configuration-table select{
+  min-height:39px;
+  padding:8px 10px;
+  border:1px solid var(--border);
+  border-radius:8px;
+  background:var(--panel);
+  color:var(--text);
+  outline:none;
+}
+.config-add-form input:focus,
+.config-add-form select:focus,
+.configuration-table input:focus,
+.configuration-table select:focus{
+  border-color:#6fa8ed;
+  box-shadow:0 0 0 3px #2878d613;
+}
+.config-add-concept{grid-template-columns:minmax(260px,1fr) auto}
+.configuration-table{min-width:720px}
+.configuration-table td{vertical-align:middle}
+.configuration-table input{width:100%;min-width:180px}
+.configuration-table select{width:100%;min-width:150px}
+.config-type-pill{
+  display:inline-flex;
+  align-items:center;
+  min-height:26px;
+  padding:4px 9px;
+  border-radius:999px;
+  background:var(--blue2);
+  color:var(--blue);
+  font-size:10px;
+  font-weight:800;
+}
+.config-actions{display:flex;gap:7px;flex-wrap:wrap}
+button.small{padding:7px 10px;font-size:10px}
+.danger-text{color:#df4d58!important}
+.config-concepts-table-wrap{max-height:480px;overflow:auto}
+
+@media(max-width:900px){
+  .config-add-form,
+  .config-add-concept{
+    grid-template-columns:1fr;
+  }
+}
