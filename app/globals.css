@@ -174,3 +174,25 @@
   .bank-labels{grid-template-columns:repeat(2,minmax(0,1fr))}
   .bank-label strong{font-size:11px}
 }
+
+
+/* --- Estadísticas históricas de Saldo --- */
+.balance-history-section{margin-bottom:26px}
+.balance-section-heading{margin:0 0 12px}
+.balance-current-heading{margin:28px 0 12px}
+.balance-total-grid{margin-bottom:16px}
+.annual-balance-table{min-width:900px}
+.annual-balance-table tfoot td{background:color-mix(in srgb,var(--panel) 86%,var(--blue) 14%);font-weight:800;border-top:2px solid var(--border)}
+.annual-balance-table tbody tr:hover{background:color-mix(in srgb,var(--panel) 94%,var(--blue) 6%)}
+
+/* --- Total del filtro de concepto --- */
+.ledger-filter-total td{position:relative;background:color-mix(in srgb,var(--panel) 82%,var(--blue) 18%);border-top:2px solid #5d9dea;font-weight:800}
+.ledger-filter-total td:first-child{white-space:normal}
+.ledger-filter-total td:first-child strong{display:block;color:var(--text);font-size:12px}
+.ledger-filter-total td:first-child span{display:block;margin-top:3px;color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ledger-filter-total .money-cell{font-size:13px}
+.ledger-filter-count{display:block;text-align:right;color:var(--muted);font-size:11px;font-weight:700;white-space:nowrap}
+
+@media(max-width:680px){
+  .balance-current-heading{margin-top:22px}
+}
