@@ -6,6 +6,7 @@ import { accounts, initialHours, initialMovements, initialSaldoSnapshot, initial
 import ExcelTools from './excel-tools';
 import InvestmentsPanel from './investments-panel';
 import AuthToolbar from './auth-toolbar';
+import BackupTools from './backup-tools';
 
 const money = new Intl.NumberFormat('es-AR', {
   style: 'currency',
@@ -195,6 +196,8 @@ export default function AccountingApp({ user = null }) {
   const [investments, setInvestments] = useState(initialInvestments);
   const [concepts, setConcepts] = useState([]);
   const [editingMovement, setEditingMovement] = useState(null);
+  const [historicalEdit, setHistoricalEdit] = useState(null);
+  const [auditLog, setAuditLog] = useState([]);
   const [ready, setReady] = useState(false);
   const [query, setQuery] = useState('');
   const [account, setAccount] = useState('TODAS');
@@ -212,6 +215,7 @@ export default function AccountingApp({ user = null }) {
     const storedInstitutions = loadStored('puente.institutions', initialInstitutions);
     const storedInvestments = loadStored('puente.investments', initialInvestments);
     const storedConcepts = loadStored('puente.concepts', null);
+    const storedAuditLog = loadStored('puente.auditLog', []);
 
     const cleanMovements = isLegacyDemoMovements(storedMovements) ? [] : storedMovements;
     const movementAccounts = [...new Set(cleanMovements.map((m) => String(m.account || '').trim()).filter(Boolean))];
@@ -235,6 +239,7 @@ export default function AccountingApp({ user = null }) {
     setInstitutions([...(storedInstitutions || initialInstitutions), ...autoInstitutions]);
     setInvestments(Array.isArray(storedInvestments) && storedInvestments.length ? storedInvestments : initialInvestments);
     setConcepts(Array.isArray(storedConcepts) && storedConcepts.length ? storedConcepts : initialConceptList);
+    setAuditLog(Array.isArray(storedAuditLog) ? storedAuditLog : []);
     setDark(loadStored('puente.dark', false));
     setCompact(loadStored('puente.compact', false));
     setColumnWidths({
@@ -288,6 +293,21 @@ export default function AccountingApp({ user = null }) {
     if (!ready) return;
     saveStored('puente.concepts', concepts);
   }, [concepts, ready]);
+
+  useEffect(() => {
+    if (!ready) return;
+    saveStored('puente.auditLog', auditLog);
+  }, [auditLog, ready]);
+
+  useEffect(() => {
+    if (!ready || !user?.email) return;
+
+    fetch('/api/usage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ module: section }),
+    }).catch(() => {});
+  }, [section, ready, user?.email]);
 
   const availableAccounts = useMemo(
     () => institutions
@@ -520,6 +540,74 @@ export default function AccountingApp({ user = null }) {
     if (confirm('¿Eliminar este registro de horas?')) {
       setHours((prev) => prev.filter((x) => x.id !== id));
     }
+  }
+
+  function openHistoricalConceptEdit(item) {
+    const targetConcept = item?.concept || 'Sin concepto';
+    const rows = filtered.filter(
+      (row) => (row.concept || 'Sin concepto') === targetConcept
+    );
+
+    if (!rows.length) return;
+
+    const years = [...new Set(rows.map(movementYear).filter(Boolean))]
+      .sort((a, b) => Number(a) - Number(b));
+
+    setHistoricalEdit({
+      oldConcept: targetConcept,
+      newConcept: targetConcept === 'Sin concepto' ? '' : targetConcept,
+      reason: '',
+      affectedIds: rows.map((row) => row.id),
+      affectedCount: rows.length,
+      years,
+      account: account === 'TODAS' ? 'Todas' : account,
+      year: year === 'TODOS' ? 'Todos' : year,
+      income: item?.income || 0,
+      expense: item?.expense || 0,
+      result: item?.result || 0,
+    });
+  }
+
+  function saveHistoricalConceptEdit(payload) {
+    const nextConcept = String(payload?.newConcept || '').trim();
+    const reason = String(payload?.reason || '').trim();
+
+    if (!historicalEdit || !nextConcept || !reason) return;
+
+    const ids = new Set(historicalEdit.affectedIds || []);
+
+    setMovements((prev) => prev.map((row) => (
+      ids.has(row.id)
+        ? { ...row, concept: nextConcept }
+        : row
+    )));
+
+    if (!concepts.includes(nextConcept)) {
+      setConcepts((prev) => [...prev, nextConcept]
+        .sort((a, b) => a.localeCompare(b, 'es')));
+    }
+
+    const logEntry = {
+      id: crypto.randomUUID(),
+      at: new Date().toISOString(),
+      userName: user?.name || 'Usuario',
+      userEmail: user?.email || '',
+      action: 'Edición histórica desde Estadísticas',
+      oldConcept: historicalEdit.oldConcept,
+      newConcept: nextConcept,
+      reason,
+      account: historicalEdit.account,
+      year: historicalEdit.year,
+      years: historicalEdit.years,
+      affectedCount: historicalEdit.affectedCount,
+      affectedIds: historicalEdit.affectedIds,
+      previousIncome: historicalEdit.income,
+      previousExpense: historicalEdit.expense,
+      previousResult: historicalEdit.result,
+    };
+
+    setAuditLog((prev) => [logEntry, ...prev].slice(0, 1000));
+    setHistoricalEdit(null);
   }
 
   function openStatistics(accountName = 'TODAS') {
