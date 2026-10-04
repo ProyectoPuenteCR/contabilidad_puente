@@ -123,3 +123,15 @@ Solo se guarda el hash en Vercel; no el código original.
 ## Variables
 
 Ver `.env.example` para la lista completa de variables soportadas.
+
+
+### Conexión directa a Upstash
+
+También puede conectarse una base Redis creada directamente en Upstash cargando en Vercel, para Production:
+
+```
+UPSTASH_REDIS_REST_URL=<rest-url>
+UPSTASH_REDIS_REST_TOKEN=<rest-token>
+```
+
+Después de modificar variables de entorno debe generarse un nuevo deployment para que Vercel las incorpore.
