@@ -1105,3 +1105,203 @@ button.small{padding:7px 10px;font-size:10px}
 @media(max-width:480px){
   .ai-kpis{grid-template-columns:1fr}
 }
+
+
+/* --- Gastos: gráficos interactivos y grilla avanzada --- */
+.expense-bars{
+  display:grid;
+  gap:5px;
+}
+.expense-bar-item{
+  appearance:none;
+  width:100%;
+  display:block;
+  margin:0 0 5px;
+  padding:8px 10px;
+  border:1px solid transparent;
+  border-radius:9px;
+  background:transparent;
+  color:var(--text);
+  text-align:left;
+  cursor:pointer;
+  font:inherit;
+}
+.expense-bar-item:hover{
+  border-color:color-mix(in srgb,var(--blue) 35%,var(--border));
+  background:color-mix(in srgb,var(--panel) 91%,var(--blue) 9%);
+}
+.expense-bar-item.selected{
+  border-color:#4f95e9;
+  background:color-mix(in srgb,var(--panel) 84%,var(--blue) 16%);
+  box-shadow:inset 3px 0 0 #2377f2;
+}
+.expense-bar-item>div:first-child{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:6px;
+  font-size:12px;
+}
+.expense-bar-item>div:first-child span{
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.expense-bar-item .bar{
+  pointer-events:none;
+}
+
+.concept-share-button{
+  appearance:none;
+  width:100%;
+  padding:7px 8px;
+  border:1px solid transparent;
+  border-radius:8px;
+  background:transparent;
+  color:var(--text);
+  cursor:pointer;
+  font:inherit;
+  text-align:left;
+}
+.concept-share-button:hover{
+  border-color:color-mix(in srgb,var(--blue) 32%,var(--border));
+  background:color-mix(in srgb,var(--panel) 92%,var(--blue) 8%);
+}
+.concept-share-button.selected{
+  border-color:#4f95e9;
+  background:color-mix(in srgb,var(--panel) 84%,var(--blue) 16%);
+}
+.concept-share-button .concept-share-track{
+  pointer-events:none;
+}
+
+.expense-grid-summary{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:12px 14px;
+  border-bottom:1px solid var(--border);
+  background:color-mix(in srgb,var(--panel) 96%,var(--bg) 4%);
+}
+.expense-grid-summary>div{
+  min-width:155px;
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+.expense-grid-summary span{
+  color:var(--muted);
+  font-size:9px;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+}
+.expense-grid-summary strong{
+  font-size:14px;
+}
+.expense-grid-sum strong{
+  color:var(--red);
+}
+.expense-grid-summary .secondary{
+  margin-left:auto;
+}
+
+.expense-detail-table{
+  min-width:1180px;
+}
+.expense-sort-row th{
+  z-index:4;
+}
+.expense-sort-row th button{
+  width:100%;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  padding:0;
+  border:0;
+  background:transparent;
+  color:inherit;
+  font:inherit;
+  font-weight:800;
+  cursor:pointer;
+  text-align:left;
+}
+.expense-sort-row th button:hover{
+  color:var(--blue);
+}
+.expense-sort-row th button span{
+  color:var(--blue);
+  font-size:11px;
+}
+.expense-column-filters th{
+  top:38px;
+  z-index:3;
+  padding:7px 9px;
+  background:color-mix(in srgb,var(--panel) 88%,var(--bg) 12%);
+}
+.expense-column-filters input{
+  width:100%;
+  min-width:190px;
+  height:34px;
+  padding:6px 9px;
+  border:1px solid var(--border);
+  border-radius:7px;
+  background:var(--panel);
+  color:var(--text);
+  outline:none;
+  font-size:10px;
+}
+.expense-column-filters input:focus{
+  border-color:#5b9be9;
+  box-shadow:0 0 0 3px #2a78d716;
+}
+.expense-filter-total-label{
+  color:var(--red)!important;
+  font-size:10px!important;
+  font-weight:850!important;
+  text-align:right!important;
+}
+.expense-detail-cell{
+  max-width:560px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.expense-table-total td{
+  position:sticky;
+  bottom:0;
+  z-index:2;
+  border-top:2px solid var(--border);
+  border-bottom:0;
+  background:var(--panel);
+}
+.expense-table-total td:first-child{
+  white-space:normal;
+}
+.expense-table-total td:first-child strong{
+  display:block;
+}
+.expense-table-total td:first-child span{
+  display:block;
+  margin-top:2px;
+  color:var(--muted);
+  font-size:9px;
+}
+.expense-empty-row{
+  height:90px;
+  color:var(--muted);
+  text-align:center!important;
+}
+
+@media(max-width:760px){
+  .expense-grid-summary{
+    align-items:stretch;
+    flex-direction:column;
+  }
+  .expense-grid-summary>div{
+    min-width:0;
+  }
+  .expense-grid-summary .secondary{
+    width:100%;
+    margin-left:0;
+  }
+}
