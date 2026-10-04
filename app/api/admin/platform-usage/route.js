@@ -1,6 +1,7 @@
 import { auth } from '../../../../auth';
 import {
   buildPlatformUsageSummary,
+  compactUsageEvents,
   isAccessStorageConfigured,
   setUsageCapacityMb,
 } from '../../../../lib/access-store';
@@ -48,6 +49,12 @@ export async function POST(request) {
 
   try {
     const body = await request.json();
+
+    if (body?.action === 'compact') {
+      const result = await compactUsageEvents(body?.retentionDays);
+      return Response.json({ ok: true, ...result });
+    }
+
     const capacityMb = await setUsageCapacityMb(body?.capacityMb);
 
     return Response.json({
