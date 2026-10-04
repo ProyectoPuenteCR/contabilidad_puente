@@ -123,16 +123,25 @@ export default function BackupTools({
         [13, 28, 30, 12, 16, 16, 42, 38]
       );
 
+      const serviceNameById = new Map(
+        safeRows(hourServices).map((row) => [row.id, row.name || ''])
+      );
+
       addSheet(
         XLSX,
         workbook,
         'Especialistas horas',
         safeRows(hourSpecialists).map((row) => ({
           Especialista: row.name || '',
+          ServiciosAsignados: safeRows(row.serviceIds)
+            .map((id) => serviceNameById.get(id))
+            .filter(Boolean)
+            .join(' | '),
+          CantidadServicios: safeRows(row.serviceIds).length,
           Activo: row.active !== false ? 'Si' : 'No',
           ID: row.id || '',
         })),
-        [36, 12, 38]
+        [36, 70, 18, 12, 38]
       );
 
       addSheet(
