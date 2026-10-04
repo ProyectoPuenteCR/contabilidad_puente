@@ -493,6 +493,65 @@ export default function AccountingApp({ user = null }) {
     return monthMap;
   }, [year, yearlyStats, filtered]);
 
+  const monthlyIncomeByAccount = useMemo(() => {
+    if (year === 'TODOS') {
+      return {
+        year: null,
+        accounts: [],
+        months: [],
+        totalsByAccount: [],
+        grandTotal: 0,
+      };
+    }
+
+    const monthNames = [
+      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+    ];
+
+    const accountMap = new Map();
+    const monthMap = Array.from({ length: 12 }, (_, index) => ({
+      index,
+      label: monthNames[index],
+      shortLabel: monthNames[index].slice(0, 3),
+      total: 0,
+      accounts: {},
+    }));
+
+    for (const row of filtered) {
+      const income = Number(row.income || 0);
+      if (income <= 0) continue;
+
+      const accountName = String(row.account || 'SIN CUENTA').trim() || 'SIN CUENTA';
+      const monthIndex = Number(String(row.date || '').slice(5, 7)) - 1;
+      if (monthIndex < 0 || monthIndex > 11) continue;
+
+      const accountTotal = Number(accountMap.get(accountName) || 0) + income;
+      accountMap.set(accountName, accountTotal);
+
+      monthMap[monthIndex].accounts[accountName] =
+        Number(monthMap[monthIndex].accounts[accountName] || 0) + income;
+      monthMap[monthIndex].total += income;
+    }
+
+    const accounts = [...accountMap.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([name]) => name);
+
+    const totalsByAccount = accounts.map((name) => ({
+      name,
+      total: Number(accountMap.get(name) || 0),
+    }));
+
+    return {
+      year,
+      accounts,
+      months: monthMap,
+      totalsByAccount,
+      grandTotal: totalsByAccount.reduce((sum, item) => sum + item.total, 0),
+    };
+  }, [year, filtered]);
+
   const expenseAverage = expenses.length ? expenseTotal / expenses.length : 0;
 
   const statisticsConcepts = useMemo(() => {
@@ -1257,6 +1316,16 @@ export default function AccountingApp({ user = null }) {
                 data={incomeExpenseComparison}
                 periodLabel={year === 'TODOS' ? 'Año' : 'Mes'}
               />
+            </Card>
+
+            <Card title={year === 'TODOS' ? 'Ingresos mensuales por cuenta' : `Ingresos mensuales por cuenta · ${year}`}>
+              {year === 'TODOS' ? (
+                <div className="monthly-account-empty">
+                  Seleccioná un año para ver los ingresos mensuales separados por cuenta.
+                </div>
+              ) : (
+                <MonthlyAccountIncomeChart data={monthlyIncomeByAccount} />
+              )}
             </Card>
 
             <Card title="Evolución anual">
@@ -2347,6 +2416,133 @@ function IncomeExpenseChart({ data, periodLabel }) {
           <span>Diferencia</span>
           <strong className={result >= 0 ? 'income' : 'expense'}>{money.format(result)}</strong>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function MonthlyAccountIncomeChart({ data }) {
+  const palette = [
+    '#8bd648',
+    '#22b7d9',
+    '#a93b0f',
+    '#ffe900',
+    '#9c8d6b',
+    '#efc5bd',
+    '#7b62d9',
+    '#ee8b2b',
+    '#39a26f',
+    '#657b91',
+  ];
+
+  const maxMonth = Math.max(
+    1,
+    ...data.months.map((month) => Number(month.total || 0))
+  );
+
+  return (
+    <div className="monthly-account-income">
+      <div className="monthly-account-head">
+        <div>
+          <span>Ingresos acumulados del año</span>
+          <strong>{money.format(data.grandTotal || 0)}</strong>
+        </div>
+
+        <div className="monthly-account-legend">
+          {data.totalsByAccount.map((account, index) => (
+            <span key={account.name} title={money.format(account.total)}>
+              <i style={{ background: palette[index % palette.length] }} />
+              {account.name}
+              <b>{money.format(account.total)}</b>
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="monthly-account-chart" role="img" aria-label="Ingresos mensuales por cuenta">
+        {data.months.map((month) => {
+          const height = (Number(month.total || 0) / maxMonth) * 100;
+          let accumulated = 0;
+
+          return (
+            <div className="monthly-account-column" key={month.index}>
+              <div className="monthly-account-value">
+                {month.total > 0 ? money.format(month.total) : ''}
+              </div>
+
+              <div
+                className="monthly-account-stack"
+                style={{ height: `${height}%` }}
+                title={`${month.label}: ${money.format(month.total || 0)}`}
+              >
+                {data.accounts.map((accountName, index) => {
+                  const amount = Number(month.accounts[accountName] || 0);
+                  if (amount <= 0 || month.total <= 0) return null;
+
+                  const share = (amount / month.total) * 100;
+                  const bottom = accumulated;
+                  accumulated += share;
+
+                  return (
+                    <i
+                      key={accountName}
+                      style={{
+                        height: `${share}%`,
+                        bottom: `${bottom}%`,
+                        background: palette[index % palette.length],
+                      }}
+                      title={`${month.label} · ${accountName}: ${money.format(amount)}`}
+                    />
+                  );
+                })}
+              </div>
+
+              <strong>{month.shortLabel}</strong>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="table-wrap monthly-account-table-wrap">
+        <table className="monthly-account-table">
+          <thead>
+            <tr>
+              <th>Mes</th>
+              {data.accounts.map((account) => (
+                <th key={account}>{account}</th>
+              ))}
+              <th>Total mensual</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.months.map((month) => (
+              <tr key={month.index}>
+                <td><strong>{month.label}</strong></td>
+                {data.accounts.map((account) => (
+                  <td className="income money-cell" key={account}>
+                    {money.format(Number(month.accounts[account] || 0))}
+                  </td>
+                ))}
+                <td className="income money-cell">
+                  <strong>{money.format(month.total || 0)}</strong>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td><strong>TOTAL AÑO</strong></td>
+              {data.totalsByAccount.map((account) => (
+                <td className="income money-cell" key={account.name}>
+                  <strong>{money.format(account.total || 0)}</strong>
+                </td>
+              ))}
+              <td className="income money-cell">
+                <strong>{money.format(data.grandTotal || 0)}</strong>
+              </td>
+            </tr>
+          </tfoot>
+        </table>
       </div>
     </div>
   );
