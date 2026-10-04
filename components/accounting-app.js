@@ -187,7 +187,12 @@ const INITIAL_HOUR_SERVICES = [
   { id: 'svc-pae-obras-nqn', name: 'PAE- OBRAS NQN', active: true },
   { id: 'svc-pae-energia', name: 'PAE-ENERGIA', active: true },
   { id: 'svc-pae-obras-chb', name: 'PAE- OBRAS CHB', active: true },
+  { id: 'svc-unpsjb', name: 'UNPSJB', active: true },
+  { id: 'svc-proyecto-puente', name: 'PROYECTO-PUENTE', active: true },
+  { id: 'svc-balko', name: 'BALKO', active: true },
   { id: 'svc-obras-otro', name: 'Obras Otro', active: true },
+  { id: 'svc-staff', name: 'Staff', active: true },
+  { id: 'svc-consejo-deliberante', name: 'Consejo Deliberante', active: true },
 ];
 
 const INITIAL_HOUR_SPECIALISTS = [
@@ -201,6 +206,7 @@ const INITIAL_HOUR_SPECIALISTS = [
   { id: 'esp-reynoso-daniela', name: 'Reynoso Daniela', active: true },
   { id: 'esp-agustin-dos-santos', name: 'Agustin dos santos', active: true },
   { id: 'esp-mauricio-david-macretti', name: 'MAURICIO DAVID MACRETTI', active: true },
+  { id: 'esp-dos-santos-marcelo', name: 'Dos Santos Marcelo', active: true },
 ];
 
 function mergeHourConfiguration(configured, historicalNames, fallback) {
@@ -1455,9 +1461,44 @@ export default function AccountingApp({ user = null }) {
     }
   }
 
+  function mergeNamedConfiguration(current, names) {
+    const result = current.slice();
+    const existing = new Set(result.map((item) => String(item.name || '').toUpperCase()));
+
+    for (const rawName of names || []) {
+      const name = String(rawName || '').trim();
+      if (!name) continue;
+      const key = name.toUpperCase();
+      if (existing.has(key)) continue;
+
+      result.push({
+        id: crypto.randomUUID(),
+        name,
+        active: true,
+      });
+      existing.add(key);
+    }
+
+    return result.sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  }
+
   function handleImport(payload) {
     const imported = payload.movements || [];
+    const importedHours = Array.isArray(payload.hours) ? payload.hours : [];
+
     setMovements(imported);
+
+    if (importedHours.length) {
+      setHours((prev) => {
+        const byId = new Map(prev.map((row) => [row.id, row]));
+        for (const row of importedHours) {
+          byId.set(row.id, row);
+        }
+        return [...byId.values()].sort(
+          (a, b) => String(b.date || '').localeCompare(String(a.date || ''))
+        );
+      });
+    }
 
     if (payload.saldoSnapshot) {
       setSaldoSnapshot((prev) => ({ ...prev, ...payload.saldoSnapshot }));
@@ -1465,6 +1506,14 @@ export default function AccountingApp({ user = null }) {
 
     if (Array.isArray(payload.investments) && payload.investments.length) {
       setInvestments(payload.investments);
+    }
+
+    if (Array.isArray(payload.hourSpecialists) && payload.hourSpecialists.length) {
+      setHourSpecialists((prev) => mergeNamedConfiguration(prev, payload.hourSpecialists));
+    }
+
+    if (Array.isArray(payload.hourServices) && payload.hourServices.length) {
+      setHourServices((prev) => mergeNamedConfiguration(prev, payload.hourServices));
     }
 
     const importedAccounts = [...new Set(imported.map((row) => String(row.account || '').trim()).filter(Boolean))];
