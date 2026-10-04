@@ -9,6 +9,7 @@ import AuthToolbar from './auth-toolbar';
 import BackupTools from './backup-tools';
 import AiAnalysisPanel from './ai-analysis-panel';
 import CloudDatabasePanel from './cloud-database-panel';
+import InvoiceReader from './invoice-reader';
 
 const money = new Intl.NumberFormat('es-AR', {
   style: 'currency',
@@ -183,6 +184,7 @@ function calculateSaldo(movements, snapshot, institutions = []) {
 
 const nav = [
   ['book', 'Libro de contabilidad'],
+  ['invoice-reader', 'Leer facturas'],
   ['balance', 'Saldo'],
   ['statistics', 'Estadísticas'],
   ['ai', 'Análisis IA'],
@@ -193,6 +195,7 @@ const nav = [
 
 const icons = {
   book: '▤',
+  'invoice-reader': '▧',
   balance: '◈',
   statistics: '▥',
   ai: '✦',
@@ -821,6 +824,54 @@ export default function AccountingApp({ user = null }) {
   function openNewMovement() {
     setEditingMovement(null);
     setModal('movement');
+  }
+
+  function importReadInvoice(movement, metadata = {}) {
+    const id = crypto.randomUUID();
+    const row = { id, ...movement };
+
+    setMovements((prev) => [row, ...prev]);
+
+    if (movement.account && !institutions.some((item) => item.name === movement.account)) {
+      setInstitutions((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          name: movement.account,
+          type: 'Otro',
+          active: true,
+        },
+      ]);
+    }
+
+    if (movement.concept && !concepts.includes(movement.concept)) {
+      setConcepts((prev) => [...prev, movement.concept]
+        .sort((a, b) => a.localeCompare(b, 'es')));
+    }
+
+    const logEntry = {
+      id: crypto.randomUUID(),
+      at: new Date().toISOString(),
+      userName: user?.name || 'Usuario',
+      userEmail: user?.email || '',
+      action: 'Importación desde Leer facturas',
+      reason: 'Comprobante revisado y confirmado por el usuario antes de importar.',
+      account: movement.account || '',
+      year: movementYear(row),
+      affectedCount: 1,
+      affectedIds: [id],
+      sourceFileName: metadata.fileName || '',
+      extraction: metadata.extraction || '',
+      documentKind: metadata.kind || '',
+      supplier: metadata.supplier || '',
+      supplierCuit: metadata.supplierCuit || '',
+      confidence: Number(metadata.confidence || 0),
+      itemCount: Number(metadata.itemCount || 0),
+      importedMovement: row,
+      fileStored: false,
+    };
+
+    setAuditLog((prev) => [logEntry, ...prev].slice(0, 1000));
   }
 
   function openEditMovement(row) {
@@ -1556,6 +1607,22 @@ export default function AccountingApp({ user = null }) {
                 totals={filteredTotals}
               />
             </Card>
+          </>
+        )}
+
+        {section === 'invoice-reader' && (
+          <>
+            <Header
+              title="Leer facturas"
+              subtitle="Leé facturas, recibos y comprobantes localmente, revisá los datos detectados e importalos al Libro sin almacenar el archivo."
+            />
+
+            <InvoiceReader
+              accountOptions={availableAccounts}
+              conceptOptions={availableConcepts}
+              movements={movements}
+              onImport={importReadInvoice}
+            />
           </>
         )}
 
