@@ -135,3 +135,5 @@ UPSTASH_REDIS_REST_TOKEN=<rest-token>
 ```
 
 Después de modificar variables de entorno debe generarse un nuevo deployment para que Vercel las incorpore.
+
+<!-- Redeploy trigger after Gemini environment configuration -->
