@@ -182,6 +182,64 @@ function calculateSaldo(movements, snapshot, institutions = []) {
   };
 }
 
+const INITIAL_HOUR_SERVICES = [
+  { id: 'svc-pae-rrhh', name: 'PAE-SERVICIO RRHH', active: true },
+  { id: 'svc-pae-obras-nqn', name: 'PAE- OBRAS NQN', active: true },
+  { id: 'svc-pae-energia', name: 'PAE-ENERGIA', active: true },
+  { id: 'svc-pae-obras-chb', name: 'PAE- OBRAS CHB', active: true },
+  { id: 'svc-obras-otro', name: 'Obras Otro', active: true },
+];
+
+const INITIAL_HOUR_SPECIALISTS = [
+  { id: 'esp-marilin-bonavide', name: 'Marilin Bonavide', active: true },
+  { id: 'esp-maricoy-nahiara-aylen', name: 'Maricoy Nahiara Aylen', active: true },
+  { id: 'esp-barria-juan-alberto', name: 'Barría, Juan Alberto', active: true },
+  { id: 'esp-almonacid-alexander-andres', name: 'Almonacid Alexander Andres', active: true },
+  { id: 'esp-dos-santos-nicolas-rodrigo', name: 'Dos santos Nicolás Rodrigo', active: true },
+  { id: 'esp-facundo-vidal', name: 'Facundo Vidal', active: true },
+  { id: 'esp-botha-ana-josefina', name: 'Botha Ana Josefina', active: true },
+  { id: 'esp-reynoso-daniela', name: 'Reynoso Daniela', active: true },
+  { id: 'esp-agustin-dos-santos', name: 'Agustin dos santos', active: true },
+  { id: 'esp-mauricio-david-macretti', name: 'MAURICIO DAVID MACRETTI', active: true },
+];
+
+function mergeHourConfiguration(configured, historicalNames, fallback) {
+  const base = Array.isArray(configured) && configured.length
+    ? configured
+    : fallback;
+
+  const seen = new Set();
+  const result = [];
+
+  for (const item of base || []) {
+    const name = String(item?.name || '').trim();
+    if (!name) continue;
+    const key = name.toUpperCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push({
+      id: item?.id || crypto.randomUUID(),
+      name,
+      active: item?.active !== false,
+    });
+  }
+
+  for (const rawName of historicalNames || []) {
+    const name = String(rawName || '').trim();
+    if (!name) continue;
+    const key = name.toUpperCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push({
+      id: crypto.randomUUID(),
+      name,
+      active: true,
+    });
+  }
+
+  return result;
+}
+
 const nav = [
   ['book', 'Libro de contabilidad'],
   ['invoice-reader', 'Leer facturas'],
@@ -208,6 +266,8 @@ export default function AccountingApp({ user = null }) {
   const [section, setSection] = useState('book');
   const [movements, setMovements] = useState(initialMovements);
   const [hours, setHours] = useState(initialHours);
+  const [hourSpecialists, setHourSpecialists] = useState(INITIAL_HOUR_SPECIALISTS);
+  const [hourServices, setHourServices] = useState(INITIAL_HOUR_SERVICES);
   const [saldoSnapshot, setSaldoSnapshot] = useState(initialSaldoSnapshot);
   const [institutions, setInstitutions] = useState(initialInstitutions);
   const [investments, setInvestments] = useState(initialInvestments);
@@ -251,6 +311,8 @@ export default function AccountingApp({ user = null }) {
   useEffect(() => {
     const storedMovements = loadStored('puente.movements', initialMovements);
     const storedHours = loadStored('puente.hours', initialHours);
+    const storedHourSpecialists = loadStored('puente.hourSpecialists', null);
+    const storedHourServices = loadStored('puente.hourServices', null);
     const storedSaldoSnapshot = loadStored('puente.saldoSnapshot', null);
     const storedInstitutions = loadStored('puente.institutions', initialInstitutions);
     const storedInvestments = loadStored('puente.investments', initialInvestments);
@@ -273,8 +335,19 @@ export default function AccountingApp({ user = null }) {
       cleanMovements.map((m) => String(m.concept || '').trim()).filter(Boolean)
     )].sort((a, b) => a.localeCompare(b, 'es'));
 
+    const cleanHours = isLegacyDemoHours(storedHours) ? [] : storedHours;
     setMovements(cleanMovements);
-    setHours(isLegacyDemoHours(storedHours) ? [] : storedHours);
+    setHours(cleanHours);
+    setHourSpecialists(mergeHourConfiguration(
+      storedHourSpecialists,
+      cleanHours.map((row) => row.specialist),
+      INITIAL_HOUR_SPECIALISTS
+    ));
+    setHourServices(mergeHourConfiguration(
+      storedHourServices,
+      cleanHours.map((row) => row.service),
+      INITIAL_HOUR_SERVICES
+    ));
     setSaldoSnapshot({ ...initialSaldoSnapshot, ...(storedSaldoSnapshot || {}) });
     setInstitutions([...(storedInstitutions || initialInstitutions), ...autoInstitutions]);
     setInvestments(Array.isArray(storedInvestments) && storedInvestments.length ? storedInvestments : initialInvestments);
@@ -335,9 +408,20 @@ export default function AccountingApp({ user = null }) {
         cloudSkipNextSyncRef.current = true;
 
         const cloudMovements = Array.isArray(payload.movements) ? payload.movements : [];
+        const cloudHours = Array.isArray(payload.hours) ? payload.hours : [];
         setMovements(cloudMovements);
         setYear(latestMovementYear(cloudMovements));
-        setHours(Array.isArray(payload.hours) ? payload.hours : []);
+        setHours(cloudHours);
+        setHourSpecialists(mergeHourConfiguration(
+          payload.hourSpecialists,
+          cloudHours.map((row) => row.specialist),
+          INITIAL_HOUR_SPECIALISTS
+        ));
+        setHourServices(mergeHourConfiguration(
+          payload.hourServices,
+          cloudHours.map((row) => row.service),
+          INITIAL_HOUR_SERVICES
+        ));
         setSaldoSnapshot({
           ...initialSaldoSnapshot,
           ...(payload.saldoSnapshot || {}),
@@ -377,6 +461,16 @@ export default function AccountingApp({ user = null }) {
     if (!ready) return;
     saveStored('puente.hours', hours);
   }, [hours, ready]);
+
+  useEffect(() => {
+    if (!ready) return;
+    saveStored('puente.hourSpecialists', hourSpecialists);
+  }, [hourSpecialists, ready]);
+
+  useEffect(() => {
+    if (!ready) return;
+    saveStored('puente.hourServices', hourServices);
+  }, [hourServices, ready]);
 
   useEffect(() => {
     if (!ready) return;
@@ -429,6 +523,8 @@ export default function AccountingApp({ user = null }) {
     cloudPendingRef.current = {
       movements,
       hours,
+      hourSpecialists,
+      hourServices,
       saldoSnapshot,
       institutions,
       investments,
@@ -452,6 +548,8 @@ export default function AccountingApp({ user = null }) {
   }, [
     movements,
     hours,
+    hourSpecialists,
+    hourServices,
     saldoSnapshot,
     institutions,
     investments,
@@ -488,6 +586,24 @@ export default function AccountingApp({ user = null }) {
   const availableConcepts = useMemo(
     () => concepts.slice().sort((a, b) => a.localeCompare(b, 'es')),
     [concepts]
+  );
+
+  const availableHourSpecialists = useMemo(
+    () => hourSpecialists
+      .filter((item) => item.active !== false)
+      .map((item) => item.name)
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b, 'es')),
+    [hourSpecialists]
+  );
+
+  const availableHourServices = useMemo(
+    () => hourServices
+      .filter((item) => item.active !== false)
+      .map((item) => item.name)
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b, 'es')),
+    [hourServices]
   );
 
   const availableYears = useMemo(
@@ -886,6 +1002,21 @@ export default function AccountingApp({ user = null }) {
 
   function saveHours(data) {
     setHours((prev) => [{ id: crypto.randomUUID(), ...data }, ...prev]);
+
+    if (data.specialist && !hourSpecialists.some((item) => item.name.toUpperCase() === String(data.specialist).toUpperCase())) {
+      setHourSpecialists((prev) => [
+        ...prev,
+        { id: crypto.randomUUID(), name: String(data.specialist).trim(), active: true },
+      ]);
+    }
+
+    if (data.service && !hourServices.some((item) => item.name.toUpperCase() === String(data.service).toUpperCase())) {
+      setHourServices((prev) => [
+        ...prev,
+        { id: crypto.randomUUID(), name: String(data.service).trim(), active: true },
+      ]);
+    }
+
     setModal(null);
   }
 
@@ -1249,6 +1380,81 @@ export default function AccountingApp({ user = null }) {
     }
   }
 
+  function addHourConfigItem(kind, name) {
+    const cleanName = String(name || '').trim();
+    if (!cleanName) return false;
+
+    const current = kind === 'specialist' ? hourSpecialists : hourServices;
+    const setter = kind === 'specialist' ? setHourSpecialists : setHourServices;
+
+    if (current.some((item) => item.name.toUpperCase() === cleanName.toUpperCase())) {
+      alert(kind === 'specialist' ? 'Ya existe ese especialista.' : 'Ya existe ese servicio / proyecto.');
+      return false;
+    }
+
+    setter((prev) => [
+      ...prev,
+      { id: crypto.randomUUID(), name: cleanName, active: true },
+    ].sort((a, b) => a.name.localeCompare(b.name, 'es')));
+
+    return true;
+  }
+
+  function renameHourConfigItem(kind, id, nextName) {
+    const cleanName = String(nextName || '').trim();
+    if (!cleanName) return false;
+
+    const current = kind === 'specialist' ? hourSpecialists : hourServices;
+    const setter = kind === 'specialist' ? setHourSpecialists : setHourServices;
+    const field = kind === 'specialist' ? 'specialist' : 'service';
+    const item = current.find((entry) => entry.id === id);
+
+    if (!item) return false;
+
+    if (current.some((entry) => entry.id !== id && entry.name.toUpperCase() === cleanName.toUpperCase())) {
+      alert(kind === 'specialist' ? 'Ya existe ese especialista.' : 'Ya existe ese servicio / proyecto.');
+      return false;
+    }
+
+    setter((prev) => prev
+      .map((entry) => entry.id === id ? { ...entry, name: cleanName } : entry)
+      .sort((a, b) => a.name.localeCompare(b.name, 'es')));
+
+    setHours((prev) => prev.map((row) => (
+      row[field] === item.name ? { ...row, [field]: cleanName } : row
+    )));
+
+    return true;
+  }
+
+  function toggleHourConfigItem(kind, id) {
+    const setter = kind === 'specialist' ? setHourSpecialists : setHourServices;
+    setter((prev) => prev.map((entry) => (
+      entry.id === id ? { ...entry, active: entry.active === false } : entry
+    )));
+  }
+
+  function deleteHourConfigItem(kind, id) {
+    const current = kind === 'specialist' ? hourSpecialists : hourServices;
+    const setter = kind === 'specialist' ? setHourSpecialists : setHourServices;
+    const field = kind === 'specialist' ? 'specialist' : 'service';
+    const item = current.find((entry) => entry.id === id);
+
+    if (!item) return;
+
+    const usage = hours.filter((row) => row[field] === item.name).length;
+    if (usage) {
+      alert(
+        `${item.name} tiene ${usage.toLocaleString('es-AR')} registro(s) históricos de horas. Usá "Dar de baja" para ocultarlo de nuevos registros sin perder el historial.`
+      );
+      return;
+    }
+
+    if (confirm(`¿Eliminar "${item.name}" de Configuración?`)) {
+      setter((prev) => prev.filter((entry) => entry.id !== id));
+    }
+  }
+
   function handleImport(payload) {
     const imported = payload.movements || [];
     setMovements(imported);
@@ -1367,9 +1573,20 @@ export default function AccountingApp({ user = null }) {
       cloudPendingRef.current = null;
 
       const reloadedMovements = Array.isArray(payload.movements) ? payload.movements : [];
+      const reloadedHours = Array.isArray(payload.hours) ? payload.hours : [];
       setMovements(reloadedMovements);
       setYear(latestMovementYear(reloadedMovements));
-      setHours(Array.isArray(payload.hours) ? payload.hours : []);
+      setHours(reloadedHours);
+      setHourSpecialists(mergeHourConfiguration(
+        payload.hourSpecialists,
+        reloadedHours.map((row) => row.specialist),
+        INITIAL_HOUR_SPECIALISTS
+      ));
+      setHourServices(mergeHourConfiguration(
+        payload.hourServices,
+        reloadedHours.map((row) => row.service),
+        INITIAL_HOUR_SERVICES
+      ));
       setSaldoSnapshot({
         ...initialSaldoSnapshot,
         ...(payload.saldoSnapshot || {}),
@@ -1415,6 +1632,8 @@ export default function AccountingApp({ user = null }) {
     const snapshot = {
       movements,
       hours,
+      hourSpecialists,
+      hourServices,
       saldoSnapshot,
       institutions,
       investments,
@@ -2010,6 +2229,8 @@ export default function AccountingApp({ user = null }) {
               user={user}
               movements={movements}
               hours={hours}
+              hourSpecialists={hourSpecialists}
+              hourServices={hourServices}
               investments={investments}
               institutions={institutions}
               concepts={concepts}
@@ -2021,6 +2242,9 @@ export default function AccountingApp({ user = null }) {
               institutions={institutions}
               concepts={concepts}
               movements={movements}
+              hours={hours}
+              hourSpecialists={hourSpecialists}
+              hourServices={hourServices}
               onAddInstitution={addInstitution}
               onRenameInstitution={renameInstitution}
               onToggleInstitution={toggleInstitution}
@@ -2028,6 +2252,10 @@ export default function AccountingApp({ user = null }) {
               onAddConcept={addConcept}
               onRenameConcept={renameConcept}
               onDeleteConcept={deleteConcept}
+              onAddHourConfigItem={addHourConfigItem}
+              onRenameHourConfigItem={renameHourConfigItem}
+              onToggleHourConfigItem={toggleHourConfigItem}
+              onDeleteHourConfigItem={deleteHourConfigItem}
             />
 
             <AuditLogCard auditLog={auditLog} />
@@ -2092,6 +2320,8 @@ export default function AccountingApp({ user = null }) {
           onHours={saveHours}
           conceptOptions={availableConcepts}
           accountOptions={availableAccounts}
+          specialistOptions={availableHourSpecialists}
+          serviceOptions={availableHourServices}
           initialMovement={editingMovement}
         />
       )}
@@ -3177,6 +3407,9 @@ function ConfigurationPanel({
   institutions,
   concepts,
   movements,
+  hours,
+  hourSpecialists,
+  hourServices,
   onAddInstitution,
   onRenameInstitution,
   onToggleInstitution,
@@ -3184,11 +3417,18 @@ function ConfigurationPanel({
   onAddConcept,
   onRenameConcept,
   onDeleteConcept,
+  onAddHourConfigItem,
+  onRenameHourConfigItem,
+  onToggleHourConfigItem,
+  onDeleteHourConfigItem,
 }) {
   const [newInstitution, setNewInstitution] = useState({ name: '', type: 'Banco' });
   const [editingInstitution, setEditingInstitution] = useState(null);
   const [newConcept, setNewConcept] = useState('');
   const [editingConcept, setEditingConcept] = useState(null);
+  const [newSpecialist, setNewSpecialist] = useState('');
+  const [newService, setNewService] = useState('');
+  const [editingHourItem, setEditingHourItem] = useState(null);
 
   const institutionUsage = useMemo(() => {
     const map = {};
@@ -3210,6 +3450,26 @@ function ConfigurationPanel({
     return map;
   }, [movements]);
 
+  const specialistUsage = useMemo(() => {
+    const map = {};
+    for (const row of hours || []) {
+      const key = String(row.specialist || '').trim();
+      if (!key) continue;
+      map[key] = (map[key] || 0) + 1;
+    }
+    return map;
+  }, [hours]);
+
+  const serviceUsage = useMemo(() => {
+    const map = {};
+    for (const row of hours || []) {
+      const key = String(row.service || '').trim();
+      if (!key) continue;
+      map[key] = (map[key] || 0) + 1;
+    }
+    return map;
+  }, [hours]);
+
   function submitInstitution(event) {
     event.preventDefault();
     if (onAddInstitution(newInstitution.name, newInstitution.type)) {
@@ -3220,6 +3480,16 @@ function ConfigurationPanel({
   function submitConcept(event) {
     event.preventDefault();
     if (onAddConcept(newConcept)) setNewConcept('');
+  }
+
+  function submitSpecialist(event) {
+    event.preventDefault();
+    if (onAddHourConfigItem('specialist', newSpecialist)) setNewSpecialist('');
+  }
+
+  function submitService(event) {
+    event.preventDefault();
+    if (onAddHourConfigItem('service', newService)) setNewService('');
   }
 
   return (
@@ -3373,6 +3643,40 @@ function ConfigurationPanel({
         </div>
       </Card>
 
+      <HourConfigCard
+        title="Especialistas"
+        help="Los especialistas disponibles en Registrar horas se administran desde esta lista."
+        placeholder="Nombre del especialista"
+        items={hourSpecialists}
+        usage={specialistUsage}
+        newValue={newSpecialist}
+        setNewValue={setNewSpecialist}
+        onSubmit={submitSpecialist}
+        kind="specialist"
+        editing={editingHourItem}
+        setEditing={setEditingHourItem}
+        onRename={onRenameHourConfigItem}
+        onToggle={onToggleHourConfigItem}
+        onDelete={onDeleteHourConfigItem}
+      />
+
+      <HourConfigCard
+        title="Servicios / Proyectos de horas"
+        help="Estos son los valores habilitados para Servicio / Proyecto al registrar horas."
+        placeholder="Nuevo servicio / proyecto"
+        items={hourServices}
+        usage={serviceUsage}
+        newValue={newService}
+        setNewValue={setNewService}
+        onSubmit={submitService}
+        kind="service"
+        editing={editingHourItem}
+        setEditing={setEditingHourItem}
+        onRename={onRenameHourConfigItem}
+        onToggle={onToggleHourConfigItem}
+        onDelete={onDeleteHourConfigItem}
+      />
+
       <Card title="Conceptos">
         <div className="configuration-help">
           Los conceptos del Libro se administran desde esta lista. Al renombrar
@@ -3469,6 +3773,135 @@ function ConfigurationPanel({
         </div>
       </Card>
     </div>
+  );
+}
+
+function HourConfigCard({
+  title,
+  help,
+  placeholder,
+  items,
+  usage,
+  newValue,
+  setNewValue,
+  onSubmit,
+  kind,
+  editing,
+  setEditing,
+  onRename,
+  onToggle,
+  onDelete,
+}) {
+  return (
+    <Card title={title}>
+      <div className="configuration-help">{help}</div>
+
+      <form className="config-add-form config-add-concept" onSubmit={onSubmit}>
+        <input
+          value={newValue}
+          onChange={(event) => setNewValue(event.target.value)}
+          placeholder={placeholder}
+          required
+        />
+        <button className="primary" type="submit">＋ Agregar</button>
+      </form>
+
+      <div className="table-wrap config-concepts-table-wrap">
+        <table className="configuration-table">
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Registros de horas</th>
+              <th>Estado</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(items || []).map((item) => {
+              const isEditing = editing?.kind === kind && editing?.id === item.id;
+
+              return (
+                <tr key={item.id}>
+                  <td>
+                    {isEditing ? (
+                      <input
+                        value={editing.value}
+                        onChange={(event) => setEditing((current) => ({
+                          ...current,
+                          value: event.target.value,
+                        }))}
+                      />
+                    ) : (
+                      <strong>{item.name}</strong>
+                    )}
+                  </td>
+                  <td>{number.format(usage?.[item.name] || 0)}</td>
+                  <td>
+                    <span className={item.active === false ? 'config-status off' : 'config-status on'}>
+                      {item.active === false ? 'Baja' : 'Activo'}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="config-actions">
+                      {isEditing ? (
+                        <>
+                          <button
+                            type="button"
+                            className="primary small"
+                            onClick={() => {
+                              if (onRename(kind, item.id, editing.value)) {
+                                setEditing(null);
+                              }
+                            }}
+                          >
+                            Guardar
+                          </button>
+                          <button
+                            type="button"
+                            className="secondary small"
+                            onClick={() => setEditing(null)}
+                          >
+                            Cancelar
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            className="secondary small"
+                            onClick={() => setEditing({
+                              kind,
+                              id: item.id,
+                              value: item.name,
+                            })}
+                          >
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            className="secondary small"
+                            onClick={() => onToggle(kind, item.id)}
+                          >
+                            {item.active === false ? 'Activar' : 'Dar de baja'}
+                          </button>
+                          <button
+                            type="button"
+                            className="secondary small danger-text"
+                            onClick={() => onDelete(kind, item.id)}
+                          >
+                            Eliminar
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   );
 }
 
@@ -3843,7 +4276,17 @@ function HistoricalConceptModal({ edit, conceptOptions, onClose, onSave }) {
   );
 }
 
-function Modal({ type, onClose, onMovement, onHours, conceptOptions, accountOptions, initialMovement }) {
+function Modal({
+  type,
+  onClose,
+  onMovement,
+  onHours,
+  conceptOptions,
+  accountOptions,
+  specialistOptions = [],
+  serviceOptions = [],
+  initialMovement,
+}) {
   const isHours = type === 'hours';
   const isExpense = type === 'expense';
   const isEditingMovement = !isHours && !isExpense && Boolean(initialMovement?.id);
@@ -3922,8 +4365,18 @@ function Modal({ type, onClose, onMovement, onHours, conceptOptions, accountOpti
           {isHours ? (
             <>
               <Field label="Fecha"><input type="date" required value={form.date} onChange={(e) => set('date', e.target.value)} /></Field>
-              <Field label="Especialista"><input required value={form.specialist} onChange={(e) => set('specialist', e.target.value)} /></Field>
-              <Field label="Servicio / Proyecto"><input required value={form.service} onChange={(e) => set('service', e.target.value)} /></Field>
+              <Field label="Especialista">
+                <select required value={form.specialist} onChange={(e) => set('specialist', e.target.value)}>
+                  <option value="">Seleccionar especialista…</option>
+                  {specialistOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+                </select>
+              </Field>
+              <Field label="Servicio / Proyecto">
+                <select required value={form.service} onChange={(e) => set('service', e.target.value)}>
+                  <option value="">Seleccionar servicio / proyecto…</option>
+                  {serviceOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+                </select>
+              </Field>
               <div className="form-row">
                 <Field label="Horas"><input type="number" step="0.5" required value={form.hours} onChange={(e) => set('hours', e.target.value)} /></Field>
                 <Field label="Valor hora"><input type="number" required value={form.hourlyRate} onChange={(e) => set('hourlyRate', e.target.value)} /></Field>
