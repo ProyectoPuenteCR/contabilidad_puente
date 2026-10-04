@@ -23,9 +23,14 @@ export default function AuthToolbar({ user }) {
 
       <div className="sidebar-auth-actions">
         {user?.role === 'admin' && (
-          <Link className="sidebar-auth-link" href="/admin/accesos">
-            Accesos
-          </Link>
+          <>
+            <Link className="sidebar-auth-link" href="/admin/accesos">
+              Accesos
+            </Link>
+            <Link className="sidebar-auth-link" href="/admin/uso">
+              Uso
+            </Link>
+          </>
         )}
 
         <button
