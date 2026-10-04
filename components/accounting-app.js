@@ -475,7 +475,9 @@ export default function AccountingApp({ user = null }) {
       .sort();
 
     const firstKey = year === 'TODOS' ? sortedKeys[0] : `${year}-01`;
-    const lastKey = year === 'TODOS' ? sortedKeys[sortedKeys.length - 1] : `${year}-12`;
+    // El último punto siempre es el último mes que realmente tiene datos.
+    // Evita que meses futuros en cero deformen la tendencia del ejercicio en curso.
+    const lastKey = sortedKeys[sortedKeys.length - 1];
 
     const [firstYear, firstMonth] = firstKey.split('-').map(Number);
     const [lastYear, lastMonth] = lastKey.split('-').map(Number);
