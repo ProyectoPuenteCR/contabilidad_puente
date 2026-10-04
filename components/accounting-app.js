@@ -7,6 +7,7 @@ import ExcelTools from './excel-tools';
 import InvestmentsPanel from './investments-panel';
 import AuthToolbar from './auth-toolbar';
 import BackupTools from './backup-tools';
+import AiAnalysisPanel from './ai-analysis-panel';
 
 const money = new Intl.NumberFormat('es-AR', {
   style: 'currency',
@@ -173,6 +174,7 @@ const nav = [
   ['book', 'Libro de contabilidad'],
   ['balance', 'Saldo'],
   ['statistics', 'Estadísticas'],
+  ['ai', 'Análisis IA'],
   ['expenses', 'Gastos'],
   ['hours', 'Horas'],
   ['settings', 'Configuración'],
@@ -182,6 +184,7 @@ const icons = {
   book: '▤',
   balance: '◈',
   statistics: '▥',
+  ai: '✦',
   expenses: '▣',
   hours: '◷',
   settings: '⚙',
@@ -1261,6 +1264,21 @@ export default function AccountingApp({ user = null }) {
                 </table>
               </div>
             </Card>
+          </>
+        )}
+
+        {section === 'ai' && (
+          <>
+            <Header
+              title="Análisis IA"
+              subtitle="Análisis automático del Libro de contabilidad por ejercicio."
+            />
+
+            <AiAnalysisPanel
+              movements={movements}
+              investments={investments}
+              years={availableYears}
+            />
           </>
         )}
 
