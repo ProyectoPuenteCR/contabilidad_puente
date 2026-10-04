@@ -2213,6 +2213,9 @@ function LedgerTable({
   filteredLabel = '',
   totals = { income: 0, expense: 0 },
 }) {
+  const [sortKey, setSortKey] = useState('date');
+  const [sortDirection, setSortDirection] = useState('desc');
+
   const columns = [
     { key: 'date', label: 'Fecha', min: 85 },
     { key: 'account', label: 'Cuenta', min: 110 },
@@ -2225,6 +2228,55 @@ function LedgerTable({
     { key: 'invoice', label: 'Factura', min: 100 },
     { key: 'actions', label: '', min: 45 },
   ];
+
+  const sortedRows = useMemo(() => {
+    const direction = sortDirection === 'asc' ? 1 : -1;
+
+    return rows.slice().sort((a, b) => {
+      if (sortKey === 'income' || sortKey === 'expense') {
+        const diff = Number(a?.[sortKey] || 0) - Number(b?.[sortKey] || 0);
+        if (diff !== 0) return diff * direction;
+
+        return String(a?.date || '').localeCompare(String(b?.date || '')) * -1;
+      }
+
+      if (sortKey === 'date') {
+        const dateDiff = String(a?.date || '').localeCompare(String(b?.date || ''));
+        if (dateDiff !== 0) return dateDiff * direction;
+
+        return String(a?.id || '').localeCompare(String(b?.id || '')) * direction;
+      }
+
+      const textDiff = String(a?.[sortKey] || '').localeCompare(
+        String(b?.[sortKey] || ''),
+        'es',
+        { sensitivity: 'base', numeric: true }
+      );
+
+      if (textDiff !== 0) return textDiff * direction;
+
+      return String(b?.date || '').localeCompare(String(a?.date || ''));
+    });
+  }, [rows, sortKey, sortDirection]);
+
+  function toggleSort(key) {
+    if (key === 'actions') return;
+
+    if (sortKey === key) {
+      setSortDirection((current) => current === 'desc' ? 'asc' : 'desc');
+      return;
+    }
+
+    setSortKey(key);
+    setSortDirection(
+      ['date', 'income', 'expense'].includes(key) ? 'desc' : 'asc'
+    );
+  }
+
+  function sortIndicator(key) {
+    if (sortKey !== key) return '↕';
+    return sortDirection === 'desc' ? '↓' : '↑';
+  }
 
   const tableWidth = columns.reduce(
     (sum, column) => sum + Number(columnWidths[column.key] || DEFAULT_WIDTHS[column.key]),
@@ -2267,10 +2319,22 @@ function LedgerTable({
         </colgroup>
 
         <thead>
-          <tr>
+          <tr className="ledger-sort-row">
             {columns.map((column) => (
               <th key={column.key}>
-                {column.label}
+                {column.key === 'actions' ? (
+                  column.label
+                ) : (
+                  <button
+                    type="button"
+                    className="ledger-sort-button"
+                    onClick={() => toggleSort(column.key)}
+                    title={`Ordenar por ${column.label}`}
+                  >
+                    <span>{column.label}</span>
+                    <b>{sortIndicator(column.key)}</b>
+                  </button>
+                )}
                 {column.key !== 'actions' && (
                   <span
                     className="column-resizer"
@@ -2284,7 +2348,7 @@ function LedgerTable({
         </thead>
 
         <tbody>
-          {rows.map((m) => (
+          {sortedRows.map((m) => (
             <tr key={m.id} className="editable-ledger-row" onClick={() => onEdit?.(m)} title="Clic para editar">
               <td>{formatDate(m.date)}</td>
               <td><span className="pill blue">{m.account}</span></td>
